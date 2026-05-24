@@ -86,10 +86,15 @@ public class SpringBootProjectGenerator {
     List<MethodDeclaration> methods = serviceIface.getMethods();
     for (MethodDeclaration method : methods) {
       generateRequestDto(method, javaDir, basePkgName);
+      boolean hasOutParams = method.getParameters().stream()
+          .anyMatch(p -> isHolderType(p.getType().asString()));
+      if (hasOutParams) {
+        generateResponseDto(method, javaDir, basePkgName, returnAsDto, servicePackage, stubSourceRoot);
+      }
     }
 
     writeCorbaClient(serviceName, servicePackage, methods, corbaDir, basePkgName);
-    writeController(serviceName, servicePackage, methods, controllerDir, basePkgName, returnAsDto);
+    writeController(serviceName, servicePackage, methods, controllerDir, basePkgName, returnAsDto, stubSourceRoot);
     writeApplicationProperties(outputDir, serviceName);
   }
 
@@ -364,8 +369,9 @@ public class SpringBootProjectGenerator {
     TypeSpec.Builder typeBuilder = TypeSpec.classBuilder(reqDtoName)
         .addModifiers(Modifier.PUBLIC);
 
-    // パラメータをDTO型として解決してフィールドに追加する
+    // in パラメータのみDTO型として解決してフィールドに追加する（out=Holder型はスキップ）
     for (Parameter parameter : method.getParameters()) {
+      if (isHolderType(parameter.getType().asString())) continue;
       String fieldType = mapToDtoType(basePkgName, parameter.getType().asString());
       TypeName typeName = convToTypeName(fieldType, dtoPkgName);
       FieldSpec field = FieldSpec.builder(typeName, parameter.getNameAsString(), Modifier.PUBLIC).build();
@@ -384,6 +390,10 @@ public class SpringBootProjectGenerator {
    * @return
    */
   private static String mapToDtoType(String basePackage, String typeNameString) {
+    // 配列型: 要素型を変換して [] を戻す (例: com.pkg.Foo[] → com.bridge.dto.FooDto[])
+    if (typeNameString.endsWith("[]")) {
+      return mapToDtoType(basePackage, typeNameString.substring(0, typeNameString.length() - 2)) + "[]";
+    }
     if (typeNameString.equals("org.omg.CORBA.Any")) {
       return basePackage + ".dto.AnyValue";
     }
@@ -391,7 +401,12 @@ public class SpringBootProjectGenerator {
       String simple = typeNameString.substring(typeNameString.lastIndexOf('.') + 1);
       return basePackage + ".dto." + simple + "Dto";
     }
-    return typeNameString;
+    // プリミティブ・String はそのまま返す
+    if (isPrimitiveType(typeNameString)) {
+      return typeNameString;
+    }
+    // 単純名の独自型: Dto を付与する（パッケージなしでHolderから取得した型など）
+    return basePackage + ".dto." + typeNameString + "Dto";
   }
 
   /**
@@ -433,9 +448,13 @@ public class SpringBootProjectGenerator {
       return ClassName.get(dtoPkgName, type.substring(type.lastIndexOf('.') + 1));
     }
     if (type.contains(".")) {
-      return ClassName.bestGuess(type);
+      // bestGuess は小文字始まりのクラス名（例: com.corba.pptFoo_struct）で失敗するため
+      // lastIndexOf('.') で pkg / simpleName を分割して ClassName.get を使う
+      return ClassName.get(
+          type.substring(0, type.lastIndexOf('.')),
+          type.substring(type.lastIndexOf('.') + 1));
     }
-    return ClassName.bestGuess(type);
+    return ClassName.get("", type);
   }
 
   /**
@@ -453,7 +472,8 @@ public class SpringBootProjectGenerator {
       List<MethodDeclaration> methods,
       Path controllerDir,
       String basePackage,
-      boolean returnAsDto) throws IOException {
+      boolean returnAsDto,
+      Path stubRoot) throws IOException {
     String controllerName = serviceName + "Controller";
     StringBuilder methodsCode = new StringBuilder();
     String dtoPackage = basePackage + ".dto";
@@ -461,12 +481,25 @@ public class SpringBootProjectGenerator {
     for (MethodDeclaration method : methods) {
       String methodName = method.getNameAsString();
       String requestDtoType = dtoPackage + "." + capitalize(methodName) + "RequestDto";
-      boolean hasRequestBody = !method.getParameters().isEmpty();
+      boolean hasOutParams = method.getParameters().stream().anyMatch(p -> isHolderType(p.getType().asString()));
+      boolean hasRequestBody = method.getParameters().stream().anyMatch(p -> !isHolderType(p.getType().asString()));
       String handlerName = "req";
+
+      if (hasOutParams) {
+        appendOutParamMethod(methodsCode, method, methodName, requestDtoType, handlerName,
+            basePackage, dtoPackage, servicePackage, serviceName, returnAsDto, hasRequestBody, stubRoot);
+        continue;
+      }
+
       methodsCode.append("    @PostMapping(\"/" + methodName + "\")\n");
       String returnType = method.getType().asString();
       String simpleReturnType = returnType.contains(".") ? returnType.substring(returnType.lastIndexOf('.') + 1)
           : returnType;
+      // 配列型かどうかと要素の単純型名を事前に求める
+      boolean isReturnArray = simpleReturnType.endsWith("[]") && !isPrimitiveType(simpleReturnType);
+      String simpleReturnElem = isReturnArray
+          ? simpleReturnType.substring(0, simpleReturnType.length() - 2)
+          : simpleReturnType;
       String controllerReturnType;
       if ("void".equals(returnType)) {
         controllerReturnType = "Object";
@@ -474,9 +507,13 @@ public class SpringBootProjectGenerator {
         controllerReturnType = returnType;
       } else if ("org.omg.CORBA.Any".equals(returnType)) {
         controllerReturnType = returnAsDto ? basePackage + ".dto.AnyValue" : "org.omg.CORBA.Any";
+      } else if (isReturnArray) {
+        // 独自型の配列: "TagDto[]" のように要素型に Dto を付けて [] を後ろに置く
+        controllerReturnType = returnAsDto ? dtoPackage + "." + simpleReturnElem + "Dto[]"
+            : resolveTypeFQN(returnType, method, servicePackage);
       } else {
         controllerReturnType = returnAsDto ? dtoPackage + "." + simpleReturnType + "Dto"
-            : originalType(returnType, servicePackage);
+            : resolveTypeFQN(returnType, method, servicePackage);
       }
 
       methodsCode.append("    public " + controllerReturnType + " " + methodName + "(");
@@ -500,8 +537,19 @@ public class SpringBootProjectGenerator {
         } else if ("org.omg.CORBA.Any".equals(originalType)) {
           methodsCode.append("        org.omg.CORBA.Any " + argName + " = " + basePackage
               + ".mapper.AnyMapper.toAny(" + handlerName + "." + parameter.getNameAsString() + ");\n");
+        } else if (simple.endsWith("[]")) {
+          // 独自型の配列パラメーター: 各要素を fromDto で変換する
+          String elemSimple = simple.substring(0, simple.length() - 2);
+          String fqnParam = resolveTypeFQN(originalType, method, servicePackage);
+          String elemFqn = fqnParam.endsWith("[]") ? fqnParam.substring(0, fqnParam.length() - 2) : fqnParam;
+          String fieldRef = handlerName + "." + parameter.getNameAsString();
+          methodsCode.append("        " + fqnParam + " " + argName + " = " + fieldRef
+              + " == null ? null : java.util.Arrays.stream(" + fieldRef + ")"
+              + ".map(" + basePackage + ".mapper." + elemSimple + "Mapper::fromDto)"
+              + ".toArray(" + elemFqn + "[]::new);\n");
         } else {
-          methodsCode.append("        " + originalType + " " + argName + " = " + basePackage + ".mapper."
+          String fqnParam = resolveTypeFQN(originalType, method, servicePackage);
+          methodsCode.append("        " + fqnParam + " " + argName + " = " + basePackage + ".mapper."
               + simple + "Mapper.fromDto(" + handlerName + "." + parameter.getNameAsString() + ");\n");
         }
         argNames.add(argName);
@@ -522,11 +570,19 @@ public class SpringBootProjectGenerator {
           methodsCode.append("        return client." + methodName + "(" + callArgs + ");\n");
         }
       } else {
-        methodsCode.append("        " + originalType(returnType, servicePackage) + " result = client."
+        methodsCode.append("        " + resolveTypeFQN(returnType, method, servicePackage) + " result = client."
             + methodName + "(" + callArgs + ");\n");
         if (returnAsDto) {
-          methodsCode.append("        return " + basePackage + ".mapper." + simpleReturnType
-              + "Mapper.toDto(result);\n");
+          if (isReturnArray) {
+            // 独自型の配列: 各要素を toDto で変換する
+            String dtoArrayType = dtoPackage + "." + simpleReturnElem + "Dto[]";
+            methodsCode.append("        return result == null ? null : java.util.Arrays.stream(result)"
+                + ".map(" + basePackage + ".mapper." + simpleReturnElem + "Mapper::toDto)"
+                + ".toArray(" + dtoArrayType + "::new);\n");
+          } else {
+            methodsCode.append("        return " + basePackage + ".mapper." + simpleReturnType
+                + "Mapper.toDto(result);\n");
+          }
         } else {
           methodsCode.append("        return result;\n");
         }
@@ -587,6 +643,38 @@ public class SpringBootProjectGenerator {
   }
 
   /**
+   * メソッド定義の import 文を参照して単純型名を完全修飾名に解決する。
+   *
+   * <p>JavaParser はシンボル解決なしでパースするため、IDLから生成されたスタブの
+   * import 文をスキャンして正しいパッケージを特定する。グローバルスコープの型が
+   * idlPackagePrefix 直下へ再配置された場合に、モジュールのパッケージと混同されるのを防ぐ。
+   *
+   * @param type            解決したい型名（単純名または配列型、例: "GlobalTag[]"）
+   * @param method          型が参照されているメソッド宣言
+   * @param fallbackPackage import で見つからない場合のフォールバックパッケージ
+   * @return 完全修飾型名
+   */
+  private static String resolveTypeFQN(String type, MethodDeclaration method, String fallbackPackage) {
+    if (type.contains(".")) return type;
+    if (isPrimitiveType(type) || "void".equals(type)) return type;
+    boolean isArray = type.endsWith("[]");
+    String elem = isArray ? type.substring(0, type.length() - 2) : type;
+    String fqn = method.findCompilationUnit()
+        .map(cu -> cu.getImports().stream()
+            .filter(imp -> !imp.isAsterisk())
+            .filter(imp -> imp.getNameAsString().endsWith("." + elem))
+            .findFirst()
+            .map(imp -> imp.getNameAsString())
+            .orElse(null))
+        .orElse(null);
+    if (fqn == null && !fallbackPackage.isEmpty()) {
+      fqn = fallbackPackage + "." + elem;
+    }
+    if (fqn == null) return type;
+    return isArray ? fqn + "[]" : fqn;
+  }
+
+  /**
    * CORBA サービス呼び出しをラップする `CorbaClient` クラスを生成します。
    * サービスの IOR を渡すことで実際の CORBA 実装へブリッジします。
    *
@@ -624,20 +712,14 @@ public class SpringBootProjectGenerator {
 
     for (MethodDeclaration method : methods) {
       String returnType = method.getType().asString();
-      String declaredReturnType = returnType;
-      if (!returnType.contains(".")
-          && !isPrimitiveType(returnType)
-          && !"void".equals(returnType)
-          && !"String".equals(returnType)
-          && !servicePackage.isEmpty()) {
-        declaredReturnType = servicePackage + "." + returnType;
-      }
+      String declaredReturnType = resolveTypeFQN(returnType, method, servicePackage);
       builder.append("    public " + declaredReturnType + " " + method.getNameAsString() + "(");
       for (int i = 0; i < method.getParameters().size(); i++) {
         Parameter parameter = method.getParameters().get(i);
         if (i > 0)
           builder.append(", ");
-        builder.append(parameter.getType().asString()).append(" ").append(parameter.getNameAsString());
+        builder.append(resolveTypeFQN(parameter.getType().asString(), method, servicePackage))
+               .append(" ").append(parameter.getNameAsString());
       }
       builder.append(") {\n");
       if ("void".equals(returnType)) {
@@ -703,6 +785,231 @@ public class SpringBootProjectGenerator {
       default:
         return false;
     }
+  }
+
+  /** Holder型（out/inoutパラメーター）かどうかを判定する。 */
+  private static boolean isHolderType(String typeName) {
+    String simple = typeName.contains(".") ? typeName.substring(typeName.lastIndexOf('.') + 1) : typeName;
+    return simple.endsWith("Holder");
+  }
+
+  /**
+   * Holder型の value フィールドの型名を返す。
+   * CORBAプリミティブHolder（org.omg.CORBA.IntHolder等）はハードコードで対応し、
+   * それ以外はスタブファイルを解析して value フィールドの型を取得する。
+   */
+  private static String resolveHolderValueType(
+      String holderType, MethodDeclaration method, String fallbackPackage, Path stubRoot) {
+    String fqn = holderType.contains(".") ? holderType
+        : resolveTypeFQN(holderType, method, fallbackPackage);
+    switch (fqn) {
+      case "org.omg.CORBA.IntHolder":     return "int";
+      case "org.omg.CORBA.LongHolder":    return "long";
+      case "org.omg.CORBA.ShortHolder":   return "short";
+      case "org.omg.CORBA.BooleanHolder": return "boolean";
+      case "org.omg.CORBA.FloatHolder":   return "float";
+      case "org.omg.CORBA.DoubleHolder":  return "double";
+      case "org.omg.CORBA.StringHolder":  return "String";
+      case "org.omg.CORBA.ByteHolder":    return "byte";
+      case "org.omg.CORBA.CharHolder":    return "char";
+      case "org.omg.CORBA.AnyHolder":     return "org.omg.CORBA.Any";
+    }
+    // スタブのHolderファイルを解析して value フィールドの型を取得する
+    if (fqn.contains(".") && stubRoot != null) {
+      String pkg = fqn.substring(0, fqn.lastIndexOf('.'));
+      String simpleName = fqn.substring(fqn.lastIndexOf('.') + 1);
+      Path holderFile = stubRoot.resolve(pkg.replace('.', '/') + "/" + simpleName + ".java");
+      if (Files.exists(holderFile)) {
+        try {
+          CompilationUnit cu = StaticJavaParser.parse(holderFile);
+          return cu.findAll(ClassOrInterfaceDeclaration.class).stream()
+              .flatMap(c -> c.getFields().stream())
+              .flatMap(f -> f.getVariables().stream())
+              .filter(v -> v.getNameAsString().equals("value"))
+              .findFirst()
+              .map(v -> v.getType().asString())
+              .orElseGet(() -> stripHolder(fqn));
+        } catch (IOException e) {
+          // フォールバックへ
+        }
+      }
+    }
+    return stripHolder(fqn);
+  }
+
+  private static String stripHolder(String fqn) {
+    return fqn.endsWith("Holder") ? fqn.substring(0, fqn.length() - "Holder".length()) : fqn;
+  }
+
+  /**
+   * out引数を持つメソッドのレスポンスDTOを生成する。
+   * 非void戻り値は returnValue フィールド、out引数はパラメーター名のフィールドとして追加する。
+   */
+  private static void generateResponseDto(
+      MethodDeclaration method,
+      Path outputRoot,
+      String basePkgName,
+      boolean returnAsDto,
+      String servicePackage,
+      Path stubRoot) throws IOException {
+    String dtoPkgName = basePkgName + ".dto";
+    String resDtoName = capitalize(method.getNameAsString()) + "ResponseDto";
+    TypeSpec.Builder typeBuilder = TypeSpec.classBuilder(resDtoName).addModifiers(Modifier.PUBLIC);
+
+    // 戻り値フィールド（void以外）
+    String returnType = method.getType().asString();
+    if (!"void".equals(returnType)) {
+      String fieldType = returnAsDto
+          ? mapToDtoType(basePkgName, returnType)
+          : resolveTypeFQN(returnType, method, servicePackage);
+      typeBuilder.addField(
+          FieldSpec.builder(convToTypeName(fieldType, dtoPkgName), "returnValue", Modifier.PUBLIC).build());
+    }
+
+    // outパラメーターフィールド
+    for (Parameter parameter : method.getParameters()) {
+      String paramType = parameter.getType().asString();
+      if (!isHolderType(paramType)) continue;
+      String valueType = resolveHolderValueType(paramType, method, servicePackage, stubRoot);
+      String fieldType = returnAsDto
+          ? mapToDtoType(basePkgName, valueType)
+          : (valueType.contains(".") ? valueType : resolveTypeFQN(valueType, method, servicePackage));
+      typeBuilder.addField(
+          FieldSpec.builder(convToTypeName(fieldType, dtoPkgName), parameter.getNameAsString(), Modifier.PUBLIC).build());
+    }
+
+    JavaFile.builder(dtoPkgName, typeBuilder.build()).build().writeTo(outputRoot);
+  }
+
+  /**
+   * out引数を持つメソッドのコントローラーコードを生成して methodsCode に追記する。
+   * ・in引数はリクエストDTOから読み出す
+   * ・out引数は新規Holderを生成してCORBAに渡す
+   * ・呼び出し後にHolder.valueを取り出してレスポンスDTOに詰めて返す
+   */
+  private static void appendOutParamMethod(
+      StringBuilder methodsCode,
+      MethodDeclaration method,
+      String methodName,
+      String requestDtoType,
+      String handlerName,
+      String basePackage,
+      String dtoPackage,
+      String servicePackage,
+      String serviceName,
+      boolean returnAsDto,
+      boolean hasRequestBody,
+      Path stubRoot) {
+
+    String returnType = method.getType().asString();
+    String responseDtoType = dtoPackage + "." + capitalize(methodName) + "ResponseDto";
+
+    methodsCode.append("    @PostMapping(\"/" + methodName + "\")\n");
+    methodsCode.append("    public " + responseDtoType + " " + methodName + "(");
+    if (hasRequestBody) {
+      methodsCode.append("@RequestBody " + requestDtoType + " " + handlerName);
+    }
+    methodsCode.append(") {\n");
+    methodsCode.append("        " + basePackage + ".corba.CorbaClient client = new "
+        + basePackage + ".corba.CorbaClient(System.getProperty(\"corba." + serviceName + ".ior\", \"\"));\n");
+
+    // 引数の生成
+    List<String> argNames = new ArrayList<>();
+    for (int i = 0; i < method.getParameters().size(); i++) {
+      Parameter parameter = method.getParameters().get(i);
+      String paramType = parameter.getType().asString();
+      String paramSimple = paramType.contains(".") ? paramType.substring(paramType.lastIndexOf('.') + 1) : paramType;
+      String argName = "arg" + i;
+      argNames.add(argName);
+
+      if (isHolderType(paramType)) {
+        // out引数: 空のHolderを生成
+        String holderFqn = resolveTypeFQN(paramType, method, servicePackage);
+        methodsCode.append("        " + holderFqn + " " + argName + " = new " + holderFqn + "();\n");
+      } else if (isPrimitiveType(paramSimple) || "String".equals(paramSimple)) {
+        methodsCode.append("        " + paramType + " " + argName + " = "
+            + handlerName + "." + parameter.getNameAsString() + ";\n");
+      } else if ("org.omg.CORBA.Any".equals(paramType)) {
+        methodsCode.append("        org.omg.CORBA.Any " + argName + " = "
+            + basePackage + ".mapper.AnyMapper.toAny(" + handlerName + "." + parameter.getNameAsString() + ");\n");
+      } else if (paramSimple.endsWith("[]")) {
+        String elemSimple = paramSimple.substring(0, paramSimple.length() - 2);
+        String fqnParam = resolveTypeFQN(paramType, method, servicePackage);
+        String elemFqn = fqnParam.endsWith("[]") ? fqnParam.substring(0, fqnParam.length() - 2) : fqnParam;
+        String fieldRef = handlerName + "." + parameter.getNameAsString();
+        methodsCode.append("        " + fqnParam + " " + argName + " = " + fieldRef
+            + " == null ? null : java.util.Arrays.stream(" + fieldRef + ")"
+            + ".map(" + basePackage + ".mapper." + elemSimple + "Mapper::fromDto)"
+            + ".toArray(" + elemFqn + "[]::new);\n");
+      } else {
+        String fqnParam = resolveTypeFQN(paramType, method, servicePackage);
+        methodsCode.append("        " + fqnParam + " " + argName + " = "
+            + basePackage + ".mapper." + paramSimple + "Mapper.fromDto("
+            + handlerName + "." + parameter.getNameAsString() + ");\n");
+      }
+    }
+
+    // CORBAサービス呼び出し
+    String callArgs = String.join(", ", argNames);
+    if ("void".equals(returnType)) {
+      methodsCode.append("        client." + methodName + "(" + callArgs + ");\n");
+    } else {
+      String corbaReturnType = resolveTypeFQN(returnType, method, servicePackage);
+      methodsCode.append("        " + corbaReturnType + " callResult = client." + methodName + "(" + callArgs + ");\n");
+    }
+
+    // レスポンスDTOの構築
+    methodsCode.append("        " + responseDtoType + " res = new " + responseDtoType + "();\n");
+
+    // 戻り値フィールド
+    if (!"void".equals(returnType)) {
+      String simpleReturn = returnType.contains(".") ? returnType.substring(returnType.lastIndexOf('.') + 1) : returnType;
+      if (returnAsDto && !isPrimitiveType(simpleReturn) && !"String".equals(simpleReturn)
+          && !"org.omg.CORBA.Any".equals(returnType)) {
+        if (simpleReturn.endsWith("[]")) {
+          String elemSimple = simpleReturn.substring(0, simpleReturn.length() - 2);
+          methodsCode.append("        res.returnValue = callResult == null ? null"
+              + " : java.util.Arrays.stream(callResult)"
+              + ".map(" + basePackage + ".mapper." + elemSimple + "Mapper::toDto)"
+              + ".toArray(" + dtoPackage + "." + elemSimple + "Dto[]::new);\n");
+        } else {
+          methodsCode.append("        res.returnValue = "
+              + basePackage + ".mapper." + simpleReturn + "Mapper.toDto(callResult);\n");
+        }
+      } else {
+        methodsCode.append("        res.returnValue = callResult;\n");
+      }
+    }
+
+    // outパラメーターフィールド
+    for (int i = 0; i < method.getParameters().size(); i++) {
+      Parameter parameter = method.getParameters().get(i);
+      String paramType = parameter.getType().asString();
+      if (!isHolderType(paramType)) continue;
+      String argName = "arg" + i;
+      String paramName = parameter.getNameAsString();
+      String valueType = resolveHolderValueType(paramType, method, servicePackage, stubRoot);
+
+      if (returnAsDto && !isPrimitiveType(valueType) && !"String".equals(valueType)) {
+        boolean isValArray = valueType.endsWith("[]");
+        String elemType = isValArray ? valueType.substring(0, valueType.length() - 2) : valueType;
+        String elemSimple = elemType.contains(".") ? elemType.substring(elemType.lastIndexOf('.') + 1) : elemType;
+        if (isValArray) {
+          methodsCode.append("        res." + paramName + " = " + argName + ".value == null ? null"
+              + " : java.util.Arrays.stream(" + argName + ".value)"
+              + ".map(" + basePackage + ".mapper." + elemSimple + "Mapper::toDto)"
+              + ".toArray(" + dtoPackage + "." + elemSimple + "Dto[]::new);\n");
+        } else {
+          methodsCode.append("        res." + paramName + " = "
+              + basePackage + ".mapper." + elemSimple + "Mapper.toDto(" + argName + ".value);\n");
+        }
+      } else {
+        methodsCode.append("        res." + paramName + " = " + argName + ".value;\n");
+      }
+    }
+
+    methodsCode.append("        return res;\n");
+    methodsCode.append("    }\n\n");
   }
 
 }

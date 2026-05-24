@@ -354,23 +354,32 @@ public class Main {
             Files.delete(src);
         }
 
-        // 全スタブファイルの import 文を修正する
-        // "import ClassName;" → "import <targetPackage>.ClassName;"
+        // 第1パス: 全スタブファイルの import 文を修正する
+        // targetDir 内のファイル（移動先と同一パッケージ）: "import ClassName;" を行ごと削除
+        // targetDir 外のファイル: "import ClassName;" → "import <targetPackage>.ClassName;" に書き換え
         Set<String> movedClasses = classToFile.keySet();
+        Path targetDirAbs = targetDir.toAbsolutePath().normalize();
         Files.walk(stubRoot)
                 .filter(Files::isRegularFile)
                 .filter(p -> p.toString().endsWith(".java"))
                 .forEach(path -> {
                     try {
+                        boolean inTargetDir = path.toAbsolutePath().normalize().getParent().equals(targetDirAbs);
                         String content = Files.readString(path);
                         boolean modified = false;
                         for (String className : movedClasses) {
                             String oldImport = "import " + className + ";";
-                            String newImport = "import " + targetPackage + "." + className + ";";
-                            if (content.contains(oldImport)) {
-                                content = content.replace(oldImport, newImport);
-                                modified = true;
+                            if (!content.contains(oldImport)) continue;
+                            if (inTargetDir) {
+                                // 同一パッケージなので import 行ごと削除する
+                                content = content.replace(oldImport + "\n", "")
+                                                 .replace(oldImport + "\r\n", "")
+                                                 .replace(oldImport, "");
+                            } else {
+                                content = content.replace(oldImport,
+                                        "import " + targetPackage + "." + className + ";");
                             }
+                            modified = true;
                         }
                         if (modified) {
                             Files.writeString(path, content, StandardOpenOption.TRUNCATE_EXISTING);
@@ -379,6 +388,76 @@ public class Main {
                         throw new RuntimeException(e);
                     }
                 });
+
+        // 第2パス: import 文なしでクラス名を参照しているファイルに import を追加する
+        // idlj はデフォルトパッケージのクラスを同一パッケージとして扱うため、
+        // 移動先から参照されるクラスの import が生成されないことがある
+        Files.walk(stubRoot)
+                .filter(Files::isRegularFile)
+                .filter(p -> p.toString().endsWith(".java"))
+                // 移動先パッケージ直下のファイルは同一パッケージなので import 不要
+                .filter(p -> !p.toAbsolutePath().normalize().getParent().equals(targetDirAbs))
+                .forEach(path -> {
+                    try {
+                        String content = Files.readString(path);
+                        boolean modified = false;
+                        for (String className : movedClasses) {
+                            String fullImport = "import " + targetPackage + "." + className + ";";
+                            if (content.contains(fullImport)) {
+                                continue;
+                            }
+                            Pattern refPat = Pattern.compile("\\b" + Pattern.quote(className) + "\\b");
+                            if (!refPat.matcher(content).find()) {
+                                continue;
+                            }
+                            content = insertImport(content, fullImport);
+                            modified = true;
+                        }
+                        if (modified) {
+                            Files.writeString(path, content, StandardOpenOption.TRUNCATE_EXISTING);
+                        }
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+
+        // 第3パス: bare import（ドットなしの "import Xxx;"）を全スタブから削除する
+        // リロケーション後はデフォルトパッケージにクラスが存在しないため、
+        // idljがsequence typedef名に対して生成した対応クラスのないimportも含めて全て無効となる
+        Pattern bareImportPat = Pattern.compile(
+                "^import [A-Za-z_][A-Za-z0-9_$]*;[ \\t]*(?:\\r\\n|\\r|\\n)?",
+                Pattern.MULTILINE);
+        Files.walk(stubRoot)
+                .filter(Files::isRegularFile)
+                .filter(p -> p.toString().endsWith(".java"))
+                .forEach(path -> {
+                    try {
+                        String content = Files.readString(path);
+                        String newContent = bareImportPat.matcher(content).replaceAll("");
+                        if (!newContent.equals(content)) {
+                            Files.writeString(path, newContent, StandardOpenOption.TRUNCATE_EXISTING);
+                        }
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+    }
+
+    /**
+     * Java ソース文字列の package 宣言直後に import 文を挿入する。
+     *
+     * @param content         Java ソース全文
+     * @param importStatement 挿入する import 文（例: "import com.pkg.Foo;"）
+     * @return import 文が挿入された Java ソース全文
+     */
+    private static String insertImport(String content, String importStatement) {
+        Pattern pkgPat = Pattern.compile("^package\\s+[\\w.]+\\s*;[ \\t]*(?:\\r\\n|\\r|\\n)", Pattern.MULTILINE);
+        Matcher m = pkgPat.matcher(content);
+        if (m.find()) {
+            int insertPos = m.end();
+            return content.substring(0, insertPos) + importStatement + "\n" + content.substring(insertPos);
+        }
+        return importStatement + "\n" + content;
     }
 
     /**

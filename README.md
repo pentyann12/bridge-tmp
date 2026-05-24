@@ -15,7 +15,9 @@
 1. **IDLファイルの準備**: 解析したいIDLファイルを用意します。これらのファイルは、CORBAサービスのインターフェース定義を含んでいる必要があります。
 2. **コマンドの実行**: 以下のコマンドを実行して、IDLファイルからJavaスタブを生成し、サービスインターフェースを抽出してSpring Bootプロジェクトを作成します。
 
-.\gradlew.bat run --console=plain --args="gen-spring --stub-root=generated-stubs --output-root=generated-spring --base-package=com.sony.sar --idl-package-prefix=com.ibm.ppt --return-mode=raw idl/service.idl"  
+```powershell
+.\gradlew.bat run --console=plain --args="gen-spring --stub-root=generated-stubs --output-root=generated-spring --base-package=com.bridge --idl-package-prefix=com.corba --return-mode=raw idl/service.idl"
+```
 
 このコマンドの引数は以下の通りです：
 - `--stub-root`: Javaスタブの出力先ディレクトリ。

@@ -76,17 +76,33 @@ public class DtoGenerator {
       return convertType(type.substring(0, type.length() - 2)) + "[]";
     }
 
-    // 型名変換
     if (type.equals("org.omg.CORBA.Any")) {
       return "AnyValue";
     }
 
-    // 名前空間変換
+    // 完全修飾名: 末尾の単純名に Dto を付与する
     if (type.contains(".")) {
       return type.substring(type.lastIndexOf(".") + 1) + "Dto";
     }
 
+    // 単純名: 組み込み型でなければ独自型として Dto を付与する
+    // グローバルスコープ由来の型は import で参照されるため完全修飾名を持たない
+    if (!isBuiltinJavaType(type)) {
+      return type + "Dto";
+    }
+
     return type;
+  }
+
+  private static boolean isBuiltinJavaType(String type) {
+    switch (type) {
+      case "int": case "long": case "short": case "byte":
+      case "boolean": case "float": case "double": case "char":
+      case "String": case "Object": case "AnyValue":
+        return true;
+      default:
+        return false;
+    }
   }
 
   /**

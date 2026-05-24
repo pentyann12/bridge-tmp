@@ -61,6 +61,7 @@ public class MapperGenerator {
 
         for (FieldDeclaration field : clazz.getFields()) {
 
+            // getElementType() は [] を落とすため、変数ごとの型で配列かどうかを判定する
             String type = field.getElementType().asString();
             String simple = type.contains(".") ? type.substring(type.lastIndexOf('.') + 1) : type;
             boolean isAny = type.equals("org.omg.CORBA.Any");
@@ -68,14 +69,43 @@ public class MapperGenerator {
 
             for (var v : field.getVariables()) {
                 String nameField = v.getNameAsString();
+                boolean isArray = v.getType().asString().endsWith("[]");
 
                 if (isAny) {
                     hasAny = true;
                     toDtoBody.addStatement("dto.$N = toAnyValue($N.$N)", nameField, "src", nameField);
                     fromDtoBody.addStatement("dst.$N = toAny(src.$N)", nameField, nameField);
                 } else if (isPrimitive) {
+                    // プリミティブ / プリミティブ配列 (int[] 等) は直接代入
                     toDtoBody.addStatement("dto.$N = $N.$N", nameField, "src", nameField);
                     fromDtoBody.addStatement("dst.$N = src.$N", nameField, nameField);
+                } else if (isArray) {
+                    // 独自型の配列: 各要素を対応する Mapper で変換する
+                    ClassName nestedMapperClass = ClassName.get(basePackage + ".mapper", simple + "Mapper");
+                    ClassName dtoElemClass = ClassName.get(dtoPackage, simple + "Dto");
+                    // 要素型のパッケージを含む構造体の import 文から逆引きする。
+                    // グローバルスコープ由来で別パッケージに再配置された型の場合、
+                    // corbaPackage (含む構造体のパッケージ) と異なるため import を参照する必要がある。
+                    String elemPkg = clazz.findCompilationUnit()
+                        .map(cu -> cu.getImports().stream()
+                            .filter(imp -> !imp.isAsterisk())
+                            .filter(imp -> imp.getNameAsString().endsWith("." + simple))
+                            .findFirst()
+                            .map(imp -> {
+                                String fqn = imp.getNameAsString();
+                                return fqn.substring(0, fqn.lastIndexOf('.'));
+                            })
+                            .orElse(null))
+                        .orElse(null);
+                    ClassName corbaElemClass = elemPkg != null
+                        ? ClassName.get(elemPkg, simple)
+                        : (corbaPackage.isEmpty() ? ClassName.bestGuess(simple) : ClassName.get(corbaPackage, simple));
+                    toDtoBody.addStatement(
+                        "dto.$N = src.$N == null ? null : java.util.Arrays.stream(src.$N).map($T::toDto).toArray($T[]::new)",
+                        nameField, nameField, nameField, nestedMapperClass, dtoElemClass);
+                    fromDtoBody.addStatement(
+                        "dst.$N = src.$N == null ? null : java.util.Arrays.stream(src.$N).map($T::fromDto).toArray($T[]::new)",
+                        nameField, nameField, nameField, nestedMapperClass, corbaElemClass);
                 } else {
                     ClassName nestedMapperClass = ClassName.get(basePackage + ".mapper", simple + "Mapper");
                     toDtoBody.addStatement("dto.$N = $T.toDto($N.$N)", nameField, nestedMapperClass, "src", nameField);
