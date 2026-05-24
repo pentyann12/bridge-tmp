@@ -1,0 +1,18 @@
+#ifndef COMMON_IDL
+#define COMMON_IDL
+
+module SampleCorbaModule {
+    struct Address {
+        string street;
+        string city;
+    };
+
+    struct UserInfo {
+        long id;
+        string name;
+        any metadata;
+        Address address;
+    };
+};
+
+#endif

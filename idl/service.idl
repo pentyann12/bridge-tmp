@@ -1,0 +1,11 @@
+#include "common.idl"
+#include "payloads.idl"
+
+module SampleCorbaModule {
+    interface SampleCorbaService {
+        void registerUser(in RequestData request);
+        RequestData findUser(in long id);
+        long countUsers(in UserInfo user, in Payload payload);
+        NestedData getNested(in long id, in RequestData request);
+    };
+};

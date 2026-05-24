@@ -1,0 +1,24 @@
+#ifndef PAYLOADS_IDL
+#define PAYLOADS_IDL
+
+#include "common.idl"
+
+module SampleCorbaModule {
+    struct Payload {
+        string payloadType;
+        any data;
+    };
+
+    struct RequestData {
+        string requestId;
+        UserInfo user;
+        Payload payload;
+    };
+
+    struct NestedData {
+        string note;
+        RequestData request;
+    };
+};
+
+#endif

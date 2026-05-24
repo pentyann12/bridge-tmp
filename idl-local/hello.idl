@@ -1,0 +1,9 @@
+module hello {
+  interface HelloService {
+    string sayHello();
+    string sayGoodbye();
+    long add(in long a, in long b);
+    any echo(in any value);
+    any addAny(in any a, in any b);
+  };
+};
