@@ -68,6 +68,8 @@ public class Main {
             String basePackage = "com.generated";
             String idlPackagePrefix = "";
             String returnMode = "dto"; // dto | raw
+            boolean singleProject = false;
+            String singleProjectName = "CombinedApi";
 
             for (int i = 1; i < args.length; i++) {
                 String arg = args[i];
@@ -81,6 +83,10 @@ public class Main {
                     idlPackagePrefix = arg.substring("--idl-package-prefix=".length());
                 } else if (arg.startsWith("--return-mode=")) {
                     returnMode = arg.substring("--return-mode=".length());
+                } else if (arg.equals("--single-project")) {
+                    singleProject = true;
+                } else if (arg.startsWith("--project-name=")) {
+                    singleProjectName = arg.substring("--project-name=".length());
                 } else if (arg.equals("--help") || arg.equals("-h")) {
                     printUsage();
                     return;
@@ -118,21 +124,33 @@ public class Main {
                 System.exit(1);
             }
 
-            // 各サービスインターフェースに対してSpring Bootプロジェクトを生成する
-            for (ClassOrInterfaceDeclaration service : services) {
+            boolean returnAsDto = "dto".equalsIgnoreCase(returnMode) || returnMode.isBlank();
+
+            if (singleProject) {
+                // 全サービスを単一プロジェクトにまとめる
                 try {
-                    // サービス名から "Operations" を取り除いてプロジェクト名を決定する
-                    String serviceName = service.getNameAsString();
-                    String shortName = serviceName.endsWith("Operations")
-                            ? serviceName.substring(0, serviceName.length() - "Operations".length())
-                            : serviceName;
-                    Path output = outputRoot.resolve(shortName + "Api");
-                    boolean returnAsDto = "dto".equalsIgnoreCase(returnMode) || returnMode.isBlank();
-                    SpringBootProjectGenerator.generate(service, stubRoot, output, basePackage, returnAsDto);
+                    Path output = outputRoot.resolve(singleProjectName);
+                    SpringBootProjectGenerator.generateAll(services, stubRoot, output, basePackage, returnAsDto);
                     System.out.println("Spring project generated at: " + output);
                 } catch (Exception e) {
                     e.printStackTrace();
                     System.exit(1);
+                }
+            } else {
+                // サービスごとに個別プロジェクトを生成する
+                for (ClassOrInterfaceDeclaration service : services) {
+                    try {
+                        String serviceName = service.getNameAsString();
+                        String shortName = serviceName.endsWith("Operations")
+                                ? serviceName.substring(0, serviceName.length() - "Operations".length())
+                                : serviceName;
+                        Path output = outputRoot.resolve(shortName + "Api");
+                        SpringBootProjectGenerator.generate(service, stubRoot, output, basePackage, returnAsDto);
+                        System.out.println("Spring project generated at: " + output);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        System.exit(1);
+                    }
                 }
             }
 

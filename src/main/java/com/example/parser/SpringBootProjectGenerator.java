@@ -93,9 +93,99 @@ public class SpringBootProjectGenerator {
       }
     }
 
-    writeCorbaClient(serviceName, servicePackage, methods, corbaDir, basePkgName);
-    writeController(serviceName, servicePackage, methods, controllerDir, basePkgName, returnAsDto, stubSourceRoot);
+    writeCorbaClient(serviceName, servicePackage, methods, corbaDir, basePkgName, "CorbaClient");
+    writeController(serviceName, servicePackage, methods, controllerDir, basePkgName, returnAsDto, stubSourceRoot, "CorbaClient");
     writeApplicationProperties(outputDir, serviceName);
+  }
+
+  /**
+   * 複数の CORBA サービスインターフェースをまとめて単一の Spring Boot プロジェクトに生成します。
+   * サービスごとに専用の CorbaClient（例: ItemServiceCorbaClient）と Controller が生成されます。
+   *
+   * @param services       CORBA サービスインターフェースのクラス宣言一覧
+   * @param stubSourceRoot idlj によって生成されたスタブソースのルートディレクトリ
+   * @param outputDir      生成する Spring Boot プロジェクトの出力ディレクトリ
+   * @param basePkgName    生成プロジェクトのベースパッケージ名
+   * @param returnAsDto    CORBA サービスの戻り値を DTO として返すかどうか
+   * @throws IOException ファイル操作に失敗した場合
+   */
+  public static void generateAll(List<ClassOrInterfaceDeclaration> services,
+      Path stubSourceRoot,
+      Path outputDir,
+      String basePkgName,
+      boolean returnAsDto) throws IOException {
+
+    Path javaDir = outputDir.resolve("src/main/java");
+    Path pkgBaseDir = javaDir.resolve(basePkgName.replace('.', '/'));
+    Path controllerDir = pkgBaseDir.resolve("controller");
+    Path dtoDir = pkgBaseDir.resolve("dto");
+    Path mapperDir = pkgBaseDir.resolve("mapper");
+    Path corbaDir = pkgBaseDir.resolve("corba");
+
+    Files.createDirectories(controllerDir);
+    Files.createDirectories(dtoDir);
+    Files.createDirectories(mapperDir);
+    Files.createDirectories(corbaDir);
+    Files.createDirectories(outputDir.resolve("src/main/resources"));
+
+    writeBuildGradle(outputDir);
+    writeApplicationClass(basePkgName, pkgBaseDir);
+    writeServletClass(basePkgName, pkgBaseDir);
+    copyIdlStubSources(stubSourceRoot, javaDir);
+    writeAnyValueDto(dtoDir, basePkgName);
+    writeAnyMapper(mapperDir, basePkgName);
+
+    List<ClassOrInterfaceDeclaration> structClasses = collectStructClasses(stubSourceRoot);
+    for (ClassOrInterfaceDeclaration structClass : structClasses) {
+      DtoGenerator.generate(structClass, javaDir, basePkgName);
+      MapperGenerator.generate(structClass, javaDir, basePkgName);
+    }
+
+    List<String> serviceNames = new ArrayList<>();
+    for (ClassOrInterfaceDeclaration serviceIface : services) {
+      String serviceName = serviceIface.getNameAsString();
+      if (serviceName.endsWith("Operations")) {
+        serviceName = serviceName.substring(0, serviceName.length() - "Operations".length());
+      }
+      serviceNames.add(serviceName);
+
+      String servicePackage = serviceIface.findCompilationUnit()
+          .flatMap(CompilationUnit::getPackageDeclaration)
+          .map(PackageDeclaration::getNameAsString)
+          .orElse("");
+
+      List<MethodDeclaration> methods = serviceIface.getMethods();
+      for (MethodDeclaration method : methods) {
+        generateRequestDto(method, javaDir, basePkgName);
+        boolean hasOutParams = method.getParameters().stream()
+            .anyMatch(p -> isHolderType(p.getType().asString()));
+        if (hasOutParams) {
+          generateResponseDto(method, javaDir, basePkgName, returnAsDto, servicePackage, stubSourceRoot);
+        }
+      }
+
+      String clientClassName = serviceName + "CorbaClient";
+      writeCorbaClient(serviceName, servicePackage, methods, corbaDir, basePkgName, clientClassName);
+      writeController(serviceName, servicePackage, methods, controllerDir, basePkgName, returnAsDto, stubSourceRoot, clientClassName);
+    }
+
+    writeApplicationPropertiesMulti(outputDir, serviceNames);
+  }
+
+  /**
+   * 複数サービス用の application.yml を書き込みます。
+   *
+   * @param outputDir    出力先ディレクトリ
+   * @param serviceNames サービス名の一覧
+   */
+  private static void writeApplicationPropertiesMulti(Path outputDir, List<String> serviceNames) throws IOException {
+    StringBuilder sb = new StringBuilder("corba:\n");
+    for (String name : serviceNames) {
+      sb.append("  ").append(name).append(":\n");
+      sb.append("    ior:\n");
+    }
+    Files.writeString(outputDir.resolve("src/main/resources/application.yml"), sb.toString(),
+        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
   }
 
   /**
@@ -473,7 +563,8 @@ public class SpringBootProjectGenerator {
       Path controllerDir,
       String basePackage,
       boolean returnAsDto,
-      Path stubRoot) throws IOException {
+      Path stubRoot,
+      String clientClassName) throws IOException {
     String controllerName = serviceName + "Controller";
     StringBuilder methodsCode = new StringBuilder();
     String dtoPackage = basePackage + ".dto";
@@ -487,7 +578,7 @@ public class SpringBootProjectGenerator {
 
       if (hasOutParams) {
         appendOutParamMethod(methodsCode, method, methodName, requestDtoType, handlerName,
-            basePackage, dtoPackage, servicePackage, serviceName, returnAsDto, hasRequestBody, stubRoot);
+            basePackage, dtoPackage, servicePackage, serviceName, returnAsDto, hasRequestBody, stubRoot, clientClassName);
         continue;
       }
 
@@ -521,8 +612,8 @@ public class SpringBootProjectGenerator {
         methodsCode.append("@RequestBody " + requestDtoType + " " + handlerName);
       }
       methodsCode.append(") {\n");
-      methodsCode.append("        " + basePackage + ".corba.CorbaClient client = new " + basePackage
-          + ".corba.CorbaClient(System.getProperty(\"corba." + serviceName + ".ior\", \"\"));\n");
+      methodsCode.append("        " + basePackage + ".corba." + clientClassName + " client = new " + basePackage
+          + ".corba." + clientClassName + "(System.getProperty(\"corba." + serviceName + ".ior\", \"\"));\n");
 
       List<String> argNames = new ArrayList<>();
       for (int i = 0; i < method.getParameters().size(); i++) {
@@ -689,7 +780,8 @@ public class SpringBootProjectGenerator {
       String servicePackage,
       List<MethodDeclaration> methods,
       Path corbaDir,
-      String basePackage
+      String basePackage,
+      String clientClassName
     ) throws IOException {
 
     StringBuilder builder = new StringBuilder();
@@ -701,10 +793,10 @@ public class SpringBootProjectGenerator {
       builder.append("import " + servicePackage + "." + serviceName + "Helper;\n");
     }
     builder.append("\n");
-    builder.append("public class CorbaClient {\n");
+    builder.append("public class " + clientClassName + " {\n");
     builder.append("    private final ORB orb;\n");
     builder.append("    private final " + serviceName + " service;\n\n");
-    builder.append("    public CorbaClient(String ior) {\n");
+    builder.append("    public " + clientClassName + "(String ior) {\n");
     builder.append("        this.orb = ORB.init(new String[0], null);\n");
     builder.append("        org.omg.CORBA.Object obj = orb.string_to_object(ior);\n");
     builder.append("        this.service = " + serviceName + "Helper.narrow(obj);\n");
@@ -738,7 +830,7 @@ public class SpringBootProjectGenerator {
 
     builder.append("}\n");
 
-    Files.writeString(corbaDir.resolve("CorbaClient.java"), builder.toString(),
+    Files.writeString(corbaDir.resolve(clientClassName + ".java"), builder.toString(),
         StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
   }
 
@@ -899,7 +991,8 @@ public class SpringBootProjectGenerator {
       String serviceName,
       boolean returnAsDto,
       boolean hasRequestBody,
-      Path stubRoot) {
+      Path stubRoot,
+      String clientClassName) {
 
     String returnType = method.getType().asString();
     String responseDtoType = dtoPackage + "." + capitalize(methodName) + "ResponseDto";
@@ -910,8 +1003,8 @@ public class SpringBootProjectGenerator {
       methodsCode.append("@RequestBody " + requestDtoType + " " + handlerName);
     }
     methodsCode.append(") {\n");
-    methodsCode.append("        " + basePackage + ".corba.CorbaClient client = new "
-        + basePackage + ".corba.CorbaClient(System.getProperty(\"corba." + serviceName + ".ior\", \"\"));\n");
+    methodsCode.append("        " + basePackage + ".corba." + clientClassName + " client = new "
+        + basePackage + ".corba." + clientClassName + "(System.getProperty(\"corba." + serviceName + ".ior\", \"\"));\n");
 
     // 引数の生成
     List<String> argNames = new ArrayList<>();
