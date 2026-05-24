@@ -10,11 +10,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.LinkedHashSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * IDL から Spring Boot 生成を行う CLI のエントリポイント。
@@ -104,6 +107,9 @@ public class Main {
                     System.exit(1);
                 }
             }
+
+            // デフォルトパッケージに出力されたグローバルスコープのスタブを修正する
+            relocateDefaultPackageStubs(stubRoot, idlPackagePrefix);
 
             // 生成されたスタブからサービスインターフェースを収集する
             List<ClassOrInterfaceDeclaration> services = collectServiceInterfaces(stubRoot);
@@ -300,6 +306,152 @@ public class Main {
             Path resolved = dir != null ? dir.resolve(rel).normalize() : Path.of(rel).toAbsolutePath().normalize();
             collectIncludedFiles(resolved, collected);
         }
+    }
+
+    /**
+     * idlj がデフォルトパッケージ（stubRoot 直下）に出力した .java ファイルを
+     * 適切なパッケージへ移動し、それを参照している import 文を更新する。
+     *
+     * IDL の仕様上、グローバルスコープで定義された typedef sequence は
+     * モジュール外のデフォルトパッケージに出力されるため、名前付きパッケージから
+     * import できない。このメソッドはその問題を後処理として修正する。
+     *
+     * @param stubRoot        idlj の出力先ルートディレクトリ。
+     * @param idlPackagePrefix -pkgPrefix に渡したパッケージプレフィックス（空の場合は自動推定）。
+     */
+    private static void relocateDefaultPackageStubs(Path stubRoot, String idlPackagePrefix) throws IOException {
+        List<Path> defaultPkgFiles;
+        try (var stream = Files.list(stubRoot)) {
+            defaultPkgFiles = stream
+                    .filter(Files::isRegularFile)
+                    .filter(p -> p.toString().endsWith(".java"))
+                    .collect(Collectors.toList());
+        }
+
+        if (defaultPkgFiles.isEmpty()) {
+            return;
+        }
+
+        Map<String, Path> classToFile = new LinkedHashMap<>();
+        for (Path file : defaultPkgFiles) {
+            classToFile.put(removeExtension(file.getFileName().toString()), file);
+        }
+
+        String targetPackage = resolveGlobalStubPackage(stubRoot, idlPackagePrefix, defaultPkgFiles);
+        Path targetDir = stubRoot.resolve(targetPackage.replace('.', '/'));
+        Files.createDirectories(targetDir);
+
+        System.out.println("Relocating " + defaultPkgFiles.size()
+                + " global-scope stub(s) to package: " + targetPackage);
+
+        // パッケージ宣言を追加してファイルを移動する
+        for (Map.Entry<String, Path> entry : classToFile.entrySet()) {
+            Path src = entry.getValue();
+            String content = Files.readString(src);
+            String newContent = "package " + targetPackage + ";\n\n" + content;
+            Path dst = targetDir.resolve(src.getFileName());
+            Files.writeString(dst, newContent, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            Files.delete(src);
+        }
+
+        // 全スタブファイルの import 文を修正する
+        // "import ClassName;" → "import <targetPackage>.ClassName;"
+        Set<String> movedClasses = classToFile.keySet();
+        Files.walk(stubRoot)
+                .filter(Files::isRegularFile)
+                .filter(p -> p.toString().endsWith(".java"))
+                .forEach(path -> {
+                    try {
+                        String content = Files.readString(path);
+                        boolean modified = false;
+                        for (String className : movedClasses) {
+                            String oldImport = "import " + className + ";";
+                            String newImport = "import " + targetPackage + "." + className + ";";
+                            if (content.contains(oldImport)) {
+                                content = content.replace(oldImport, newImport);
+                                modified = true;
+                            }
+                        }
+                        if (modified) {
+                            Files.writeString(path, content, StandardOpenOption.TRUNCATE_EXISTING);
+                        }
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+    }
+
+    /**
+     * グローバルスコープスタブの移動先パッケージを決定する。
+     *
+     * <p>優先順位：
+     * <ol>
+     *   <li>{@code idlPackagePrefix} が空でなければそれを使用する。</li>
+     *   <li>既存スタブのパッケージ名から共通プレフィックスを求めて使用する。</li>
+     *   <li>上記が得られなければ {@code "generated"} を使用する。</li>
+     * </ol>
+     */
+    private static String resolveGlobalStubPackage(
+            Path stubRoot, String idlPackagePrefix, List<Path> excludeFiles) throws IOException {
+        if (!idlPackagePrefix.isBlank()) {
+            return idlPackagePrefix;
+        }
+
+        Set<Path> excludeSet = new LinkedHashSet<>();
+        for (Path f : excludeFiles) {
+            excludeSet.add(f.toAbsolutePath().normalize());
+        }
+
+        List<String> packages = new ArrayList<>();
+        Pattern pkgPat = Pattern.compile("^package\\s+([\\w.]+)\\s*;", Pattern.MULTILINE);
+        Files.walk(stubRoot)
+                .filter(Files::isRegularFile)
+                .filter(p -> p.toString().endsWith(".java"))
+                .filter(p -> !excludeSet.contains(p.toAbsolutePath().normalize()))
+                .forEach(p -> {
+                    try {
+                        Matcher m = pkgPat.matcher(Files.readString(p));
+                        if (m.find()) {
+                            String pkg = m.group(1);
+                            if (!packages.contains(pkg)) {
+                                packages.add(pkg);
+                            }
+                        }
+                    } catch (IOException e) {
+                        // 読み取り失敗は無視して続行する
+                    }
+                });
+
+        if (!packages.isEmpty()) {
+            String common = packages.get(0);
+            for (String pkg : packages) {
+                common = packageCommonPrefix(common, pkg);
+                if (common.isEmpty()) break;
+            }
+            if (!common.isEmpty()) {
+                return common;
+            }
+        }
+
+        return "generated";
+    }
+
+    /**
+     * ドット区切りパッケージ名の共通プレフィックスを返す。
+     * 例: {@code "com.example.a"} と {@code "com.example.b"} → {@code "com.example"}
+     */
+    private static String packageCommonPrefix(String a, String b) {
+        String[] partsA = a.split("\\.");
+        String[] partsB = b.split("\\.");
+        List<String> common = new ArrayList<>();
+        for (int i = 0; i < Math.min(partsA.length, partsB.length); i++) {
+            if (partsA[i].equals(partsB[i])) {
+                common.add(partsA[i]);
+            } else {
+                break;
+            }
+        }
+        return String.join(".", common);
     }
 
     /**

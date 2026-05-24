@@ -1,0 +1,14 @@
+typedef sequence<long> IdList;
+
+module SampleModule {
+    struct Item {
+        long id;
+        string name;
+        IdList relatedIds;
+    };
+    interface ItemService {
+        IdList getAllIds();
+        Item getItem(in long id);
+        void deleteItem(in long id);
+    };
+};

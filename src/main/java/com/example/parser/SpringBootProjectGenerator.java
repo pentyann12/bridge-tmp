@@ -6,6 +6,7 @@ import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.squareup.javapoet.ArrayTypeName;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
@@ -401,6 +402,11 @@ public class SpringBootProjectGenerator {
    * @return TypeName
    */
   private static TypeName convToTypeName(String type, String dtoPkgName) {
+    // 配列型: 要素型を再帰解決して ArrayTypeName を返す (例: int[] → int[] TypeName)
+    if (type.endsWith("[]")) {
+      TypeName elem = convToTypeName(type.substring(0, type.length() - 2), dtoPkgName);
+      return ArrayTypeName.of(elem);
+    }
     if (type.equals("int"))
       return TypeName.INT;
     if (type.equals("long"))
@@ -571,6 +577,12 @@ public class SpringBootProjectGenerator {
     if (returnType.contains(".")) {
       return returnType;
     }
+    // 配列型: 要素型にパッケージを付与して [] を戻す
+    if (returnType.endsWith("[]")) {
+      String elem = returnType.substring(0, returnType.length() - 2);
+      if (isPrimitiveType(elem)) return returnType;
+      return servicePackage.isEmpty() ? returnType : servicePackage + "." + elem + "[]";
+    }
     return servicePackage.isEmpty() ? returnType : servicePackage + "." + returnType;
   }
 
@@ -674,6 +686,9 @@ public class SpringBootProjectGenerator {
   private static boolean isPrimitiveType(String type) {
     if (type == null)
       return false;
+    // 配列型は要素型で再帰判定する (例: int[] → int → true)
+    if (type.endsWith("[]"))
+      return isPrimitiveType(type.substring(0, type.length() - 2));
     switch (type) {
       case "int":
       case "long":

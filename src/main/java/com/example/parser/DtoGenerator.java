@@ -41,10 +41,11 @@ public class DtoGenerator {
         .addModifiers(Modifier.PUBLIC);
 
     for (FieldDeclaration field : clazz.getFields()) {
-      String originalType = field.getElementType().asString();
-      String dtoType = convertType(originalType);
-
+      // getElementType() は [] を落とすため、変数ごとの型 (v.getType()) を使う
+      // 例: "int relatedIds[]" → v.getType().asString() = "int[]"
       field.getVariables().forEach(v -> {
+        String originalType = v.getType().asString();
+        String dtoType = convertType(originalType);
         FieldSpec fieldSpec = FieldSpec.builder(
             toTypeName(dtoType, dtoPackage),
             v.getNameAsString(),
@@ -70,6 +71,11 @@ public class DtoGenerator {
    * @return 変換後の型名
    */
   private static String convertType(String type) {
+    // 配列型: 要素型を変換して [] を戻す (例: int[] → int[], FooClass[] → FooClassDto[])
+    if (type.endsWith("[]")) {
+      return convertType(type.substring(0, type.length() - 2)) + "[]";
+    }
+
     // 型名変換
     if (type.equals("org.omg.CORBA.Any")) {
       return "AnyValue";
@@ -90,6 +96,10 @@ public class DtoGenerator {
    * @return TypeName
    */
   private static TypeName toTypeName(String type, String dtoPackage) {
+    // 配列型: 要素型を再帰解決して ArrayTypeName を返す
+    if (type.endsWith("[]")) {
+      return ArrayTypeName.of(toTypeName(type.substring(0, type.length() - 2), dtoPackage));
+    }
     return switch (type) {
       case "int" -> TypeName.INT;
       case "long" -> TypeName.LONG;
