@@ -3,64 +3,58 @@ package com.example.parser;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.squareup.javapoet.*;
-
-import javax.lang.model.element.Modifier;
 import java.io.IOException;
 import java.nio.file.Path;
+import javax.lang.model.element.Modifier;
 
 /**
  * DTO生成クラス
  *
- * JavaParserで解析したIDL由来のクラス情報をもとに、
- * JavaPoetを使用してDTOクラスを生成する
+ * <p>JavaParserで解析したIDL由来のクラス情報をもとに、 JavaPoetを使用してDTOクラスを生成する
  *
  * <ul>
- * <li>クラス名からDTOクラス名への変換</li>
- * <li>フィールド型を変換（CORBA.Any → Object）</li>
- * <li>Javaソースコード生成とファイル出力</li>
+ *   <li>クラス名からDTOクラス名への変換
+ *   <li>フィールド型を変換（CORBA.Any → Object）
+ *   <li>Javaソースコード生成とファイル出力
  * </ul>
  */
 public class DtoGenerator {
   /**
    * DTOクラスを生成し、指定ディレクトリに出力する
    *
-   * @param clazz     解析済みクラス定義（IDL由来）
+   * @param clazz 解析済みクラス定義（IDL由来）
    * @param outputDir 出力先ディレクトリ
    */
-  public static void generate(
-      ClassOrInterfaceDeclaration clazz,
-      Path outputDir,
-      String basePackage) throws IOException {
+  public static void generate(ClassOrInterfaceDeclaration clazz, Path outputDir, String basePackage)
+      throws IOException {
     String className = clazz.getNameAsString();
     String dtoName = className + "Dto";
     String dtoPackage = basePackage + ".dto";
 
     // DTO用のクラスを作成し、全てのフィールドをDTOにコピーする
     // このとき、フィールドの型はDTO用の型へ変換する
-    TypeSpec.Builder typeBuilder = TypeSpec.classBuilder(dtoName)
-        .addModifiers(Modifier.PUBLIC);
+    TypeSpec.Builder typeBuilder = TypeSpec.classBuilder(dtoName).addModifiers(Modifier.PUBLIC);
 
     for (FieldDeclaration field : clazz.getFields()) {
       // getElementType() は [] を落とすため、変数ごとの型 (v.getType()) を使う
       // 例: "int relatedIds[]" → v.getType().asString() = "int[]"
-      field.getVariables().forEach(v -> {
-        String originalType = v.getType().asString();
-        String dtoType = convertType(originalType);
-        FieldSpec fieldSpec = FieldSpec.builder(
-            toTypeName(dtoType, dtoPackage),
-            v.getNameAsString(),
-            Modifier.PUBLIC)
-            .build();
+      field
+          .getVariables()
+          .forEach(
+              v -> {
+                String originalType = v.getType().asString();
+                String dtoType = convertType(originalType);
+                FieldSpec fieldSpec =
+                    FieldSpec.builder(
+                            toTypeName(dtoType, dtoPackage), v.getNameAsString(), Modifier.PUBLIC)
+                        .build();
 
-        typeBuilder.addField(fieldSpec);
-      });
+                typeBuilder.addField(fieldSpec);
+              });
     }
 
     // Javaファイルとして出力する
-    JavaFile javaFile = JavaFile.builder(
-        dtoPackage,
-        typeBuilder.build())
-        .build();
+    JavaFile javaFile = JavaFile.builder(dtoPackage, typeBuilder.build()).build();
     javaFile.writeTo(outputDir);
   }
 
@@ -96,9 +90,17 @@ public class DtoGenerator {
 
   private static boolean isBuiltinJavaType(String type) {
     switch (type) {
-      case "int": case "long": case "short": case "byte":
-      case "boolean": case "float": case "double": case "char":
-      case "String": case "Object": case "AnyValue":
+      case "int":
+      case "long":
+      case "short":
+      case "byte":
+      case "boolean":
+      case "float":
+      case "double":
+      case "char":
+      case "String":
+      case "Object":
+      case "AnyValue":
         return true;
       default:
         return false;
