@@ -366,6 +366,7 @@ public class SpringBootProjectGenerator {
           public static AnyValue toAnyValue(Any any) {
             if (any == null) return null;
             TCKind kind = any.type().kind();
+            if (kind.equals(TCKind.tk_null) || kind.equals(TCKind.tk_void)) return null;
             if (kind.equals(TCKind.tk_boolean)) return new AnyValue("boolean", any.extract_boolean());
             else if (kind.equals(TCKind.tk_short)) return new AnyValue("short", any.extract_short());
             else if (kind.equals(TCKind.tk_ushort)) return new AnyValue("short", any.extract_ushort());
