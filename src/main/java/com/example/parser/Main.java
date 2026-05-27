@@ -27,15 +27,6 @@ public class Main {
    * @param args コマンドライン引数
    */
   public static void main(String[] args) throws Exception {
-    /**
-     * CLI のエントリポイント
-     *
-     * <p>`gen-spring` コマンドをサポートし、次の処理を順に実行します 1. 指定された IDL ファイルから `idlj` を呼び出して Java スタブを生成 2.
-     * 生成されたスタブからサービスインターフェースを収集 3. それぞれのサービスに対して Spring Boot プロジェクトを生成
-     *
-     * <p>コマンドラインオプションの取り扱い詳細は `printUsage` を参照してください
-     */
-    // if (args.length > 0 && "gen-spring".equals(args[0])) {
     Path idljPath = Path.of("tools", "idlj.jar");
     List<Path> idlFiles = new ArrayList<>();
     Path stubRoot = Path.of("generated-stubs");
