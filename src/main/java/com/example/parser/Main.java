@@ -120,16 +120,16 @@ public class Main {
   private static void printUsage() {
     System.out.print(
         """
-            Usage: [options] <idl-file>...
+        Usage: [options] <idl-file>...
 
-            Options:
-              --stub-root=<path>          IDL生成Javaソースの出力先ディレクトリ (default: generated-stubs)
-              --output-root=<path>        Springプロジェクト出力先ディレクトリ (default: generated-spring)
-              --base-package=<package>    生成されるSpringプロジェクトのベースパッケージ (default: com.generated)
-              --idl-package-prefix=<pkg>  IDLモジュール名に対してidljのパッケージプレフィックスを適用
-              --help, -h                  このヘルプを表示
+        Options:
+          --stub-root=<path>          IDL生成Javaソースの出力先ディレクトリ (default: generated-stubs)
+          --output-root=<path>        Springプロジェクト出力先ディレクトリ (default: generated-spring)
+          --base-package=<package>    生成されるSpringプロジェクトのベースパッケージ (default: com.generated)
+          --idl-package-prefix=<pkg>  IDLモジュール名に対してidljのパッケージプレフィックスを適用
+          --help, -h                  このヘルプを表示
 
-            """);
+        """);
   }
 
   /**
