@@ -34,11 +34,8 @@ import javax.lang.model.element.Modifier;
  * </ol>
  */
 public class SpringBootProjectGenerator {
-
-  // ─────────────────────────────── Public API ──────────────────────────────
-
   /**
-   * 単一の CORBA サービスインターフェースから Spring Boot プロジェクトを生成します
+   * 単一の CORBA サービスインターフェースから Spring Boot プロジェクトを生成
    *
    * @param serviceIface CORBA サービスインターフェースのクラス宣言
    * @param stubSourceRoot idlj によって生成されたスタブソースのルートディレクトリ
@@ -61,7 +58,7 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * 複数の CORBA サービスインターフェースをまとめて単一の Spring Boot プロジェクトに生成します サービスごとに専用の CorbaClient（例: {@code
+   * 複数の CORBA サービスインターフェースをまとめて単一の Spring Boot プロジェクトに生成 サービスごとに専用の CorbaClient（例: {@code
    * ItemServiceCorbaClient}）と Controller が生成されます
    *
    * @param services CORBA サービスインターフェースのクラス宣言一覧
@@ -89,11 +86,9 @@ public class SpringBootProjectGenerator {
     writeApplicationProperties(outputDir, serviceNames);
   }
 
-  // ─────────────────────────── Project scaffold ─────────────────────────────
-
   /**
    * プロジェクトの共通部分（ディレクトリ・ビルドファイル・共有クラス・スタブ・構造体 DTO/Mapper）を生成し、 
-   * 出力先のレイアウト情報を返します
+   * 出力先のレイアウト情報を返
    *
    * @param stubSourceRoot スタブのルートディレクトリ
    * @param outputDir Spring Boot プロジェクトの出力先
@@ -131,7 +126,7 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * サービス固有ファイル（RequestDto・ResponseDto・CorbaClient・Controller）を生成します
+   * サービス固有ファイル（RequestDto・ResponseDto・CorbaClient・Controller）を生成
    *
    * @param serviceIface サービスインターフェースのクラス宣言
    * @param serviceName サービス名（"Operations" サフィックスを除いたもの）
@@ -429,7 +424,7 @@ public class SpringBootProjectGenerator {
   // MARK: 動的ファイル生成
   
   /**
-   * CORBA サービス呼び出しをラップする CorbaClient クラスを生成します
+   * CORBAサービス呼び出しをラップするCorbaClientクラスを生成
    *
    * @param serviceName サービス名（例: "ItemService"）
    * @param servicePackage サービスが属するパッケージ
@@ -463,7 +458,6 @@ public class SpringBootProjectGenerator {
     }
     sb.append("\n@Component\npublic class ").append(clientClassName).append(" {\n");
     sb.append("    private final ").append(serviceName).append(" service;\n\n");
-    // IOR は application.yml の corba.<serviceName>.ior から注入する
     sb.append("    public ")
         .append(clientClassName)
         .append("(@Value(\"${corba.")
@@ -509,7 +503,7 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * Spring MVC コントローラークラスを生成します メソッドごとに {@link #appendControllerMethod} を呼び出してコードを組み立てます
+   * Spring MVC コントローラークラスを生成 メソッドごとに {@link #appendControllerMethod} を呼び出してコードを組み立てます
    *
    * @param serviceName サービス名
    * @param servicePackage サービスが属するパッケージ
@@ -580,7 +574,7 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * コントローラーメソッド1つ分のコードを {@code sb} に追記します
+   * コントローラーメソッド1つ分のコードを {@code sb} に追記
    *
    * <p>out引数（Holder型）の有無で挙動が変わります:
    *
@@ -680,8 +674,8 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * out引数を持つメソッドのレスポンスDTO構築コードを追記します CORBA 呼び出し後の {@code callResult} と各 {@code Holder.value} を
-   * ResponseDto フィールドに詰めて返します
+   * out引数を持つメソッドのレスポンスDTO構築コードを追記 CORBA 呼び出し後の {@code callResult} と各 {@code Holder.value} を
+   * ResponseDto フィールドに詰めて返
    */
   private static void appendOutParamResponseDto(
       StringBuilder sb,
@@ -725,7 +719,7 @@ public class SpringBootProjectGenerator {
     sb.append("        return res;\n");
   }
 
-  /** out引数なし・非void メソッドの return 文を追記します 戻り型に応じて primitive/String/Any/独自型・配列を使い分けます */
+  /** out引数なし・非void メソッドの return 文を追記 戻り型に応じて primitive/String/Any/独自型・配列を使い分けます */
   private static void appendDirectReturn(
       StringBuilder sb,
       MethodDeclaration method,
@@ -778,7 +772,7 @@ public class SpringBootProjectGenerator {
   // ──────────────────────────── DTO generation ──────────────────────────────
 
   /**
-   * CORBA サービスメソッドの in パラメーター（Holder型を除く）をフィールドとして持つ リクエスト DTO を出力します
+   * CORBAサービスメソッド用のリクエストDTOを出力する
    *
    * @param method サービスメソッドの宣言
    * @param outputRoot Java ソースのルートディレクトリ
@@ -792,7 +786,11 @@ public class SpringBootProjectGenerator {
             .addModifiers(Modifier.PUBLIC);
 
     for (Parameter param : method.getParameters()) {
-      if (isHolderType(param.getType().asString())) continue; // out引数はリクエストボディに含めない
+      if (isHolderType(param.getType().asString())) {
+        // out引数はリクエストボディから除外する
+        continue;
+      }
+      
       String fieldType = mapToDtoType(basePkgName, param.getType().asString());
       typeBuilder.addField(
           FieldSpec.builder(
@@ -804,7 +802,7 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * out引数を持つメソッド専用のレスポンス DTO を出力します 非void戻り値は {@code returnValue} フィールド、out引数はパラメーター名のフィールドになります
+   * out引数を持つメソッド専用のレスポンス DTO を出力 非void戻り値は {@code returnValue} フィールド、out引数はパラメーター名のフィールドになります
    *
    * @param method サービスメソッドの宣言
    * @param outputRoot Java ソースのルートディレクトリ
@@ -857,7 +855,7 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * application.yml を出力しますサービスが複数の場合は全サービス分の IOR 設定を出力します
+   * application.yml を出力サービスが複数の場合は全サービス分の IOR 設定を出力
    *
    * @param outputDir プロジェクト出力先ディレクトリ
    * @param serviceNames サービス名の一覧
@@ -878,7 +876,7 @@ public class SpringBootProjectGenerator {
   // ─────────────────────────────── Helpers ─────────────────────────────────
 
   /**
-   * スタブから CORBA 構造体クラスの一覧を収集します インターフェース・Helper・Holder・POA・Stub・メソッドを持つクラスは除外します
+   * スタブから CORBA 構造体クラスの一覧を収集 インターフェース・Helper・Holder・POA・Stub・メソッドを持つクラスは除外
    *
    * @param stubSourceRoot スタブのルートディレクトリ
    * @return 構造体クラスの一覧
@@ -904,7 +902,7 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * DTO/Mapper 生成対象の構造体クラスかどうかを判定します インターフェース・各種 idlj 生成クラス（Helper/Holder/POA 等）・メソッドを持つクラスは除外します
+   * DTO/Mapper 生成対象の構造体クラスかどうかを判定 インターフェース・各種 idlj 生成クラス（Helper/Holder/POA 等）・メソッドを持つクラスは除外
    */
   private static boolean isTargetStruct(ClassOrInterfaceDeclaration clazz) {
     if (clazz.isInterface()) return false;
@@ -919,7 +917,7 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * in引数1つ分の DTO→CORBA 変換コードを {@code sb} に追記します Holder型（out引数）はこのメソッドの対象外です
+   * in引数1つ分の DTO→CORBA 変換コードを {@code sb} に追記 Holder型（out引数）はこのメソッドの対象外です
    *
    * <ul>
    *   <li>プリミティブ/String: {@code req} フィールドをそのまま代入
@@ -995,7 +993,7 @@ public class SpringBootProjectGenerator {
     }
   }
 
-  /** コントローラーメソッドの戻り型文字列を解決します out引数ありなら ResponseDto、なければ CORBA 型または DTO 型を返します */
+  /** コントローラーメソッドの戻り型文字列を解決 out引数ありなら ResponseDto、なければ CORBA 型または DTO 型を返 */
   private static String resolveControllerReturnType(
       MethodDeclaration method,
       String basePackage,
@@ -1018,9 +1016,9 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * CORBA 値を DTO へ変換する式（代入 RHS として使える文字列）を返します
+   * CORBA 値を DTO へ変換する式（代入 RHS として使える文字列）を返
    *
-   * <p>{@code returnAsDto=false} またはプリミティブ/String/Any の場合は {@code rhs} をそのまま返します 配列型は {@code
+   * <p>{@code returnAsDto=false} またはプリミティブ/String/Any の場合は {@code rhs} をそのまま返 配列型は {@code
    * Arrays.stream().map(Mapper::toDto).toArray()} 形式、 独自型は {@code XxxMapper.toDto(rhs)} 形式になります
    *
    * @param rhs 変換元の式（例: "result", "arg0.value"）
@@ -1058,7 +1056,7 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * CORBA 型名をジェネレーター内部の DTO 型名へマップします
+   * CORBA 型名をジェネレーター内部の DTO 型名へマップ
    *
    * <ul>
    *   <li>配列型: 要素型を再帰変換して {@code []} を付け直す（例: {@code com.pkg.Foo[] → dto.FooDto[]}）
@@ -1085,19 +1083,18 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * 型名文字列を JavaPoet {@link TypeName} へ変換します
-   *
-   * <p>JavaPoet の {@code ClassName.bestGuess} は小文字始まりの単純名（例: {@code pptFoo_struct}）で
-   * 例外を投げるため、{@code lastIndexOf('.')} でパッケージと単純名を分割して {@link ClassName#get(String, String)} を使います
+   * 型名文字列をTypeNameへ変換する
    *
    * @param type 変換元の型名
-   * @param dtoPkgName DTO パッケージ名（同パッケージのクラス解決に使用）
-   * @return 対応する {@link TypeName}
+   * @param dtoPkgName DTOパッケージ名
+   * @return TypeName
    */
   private static TypeName convToTypeName(String type, String dtoPkgName) {
+    // 配列型: 要素型を再帰してArrayTypeNameとして返す
     if (type.endsWith("[]")) {
       return ArrayTypeName.of(convToTypeName(type.substring(0, type.length() - 2), dtoPkgName));
     }
+
     switch (type) {
       case "int":
         return TypeName.INT;
@@ -1131,9 +1128,9 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * メソッド定義の import 文を参照して単純型名を完全修飾名に解決します
+   * メソッド定義の import 文を参照して単純型名を完全修飾名に解決
    *
-   * <p>JavaParser はシンボル解決なしでパースするため、IDLから生成されたスタブの import 文をスキャンして正しいパッケージを特定しますグローバルスコープの型が
+   * <p>JavaParser はシンボル解決なしでパースするため、IDLから生成されたスタブの import 文をスキャンして正しいパッケージを特定グローバルスコープの型が
    * idlPackagePrefix 直下へ再配置された場合でも正しく解決できます
    *
    * @param type 解決したい型名（単純名または配列型、例: "GlobalTag[]"）
@@ -1164,10 +1161,10 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * Holder 型（CORBA out/inout パラメーター）の {@code value} フィールドの型名を返します
+   * Holder 型（CORBA out/inout パラメーター）の {@code value} フィールドの型名を返
    *
    * <p>CORBA プリミティブ Holder（{@code org.omg.CORBA.IntHolder} 等）はハードコードで対応し、 独自 Holder はスタブファイルを解析して
-   * {@code value} フィールドの型を取得します idlj は sequence typedef に対して配列型の {@code value} フィールドを生成するため （例:
+   * {@code value} フィールドの型を取得 idlj は sequence typedef に対して配列型の {@code value} フィールドを生成するため （例:
    * {@code GlobalTag value[]}）、ファイル解析が必要です
    *
    * @param holderType Holder 型の名前（単純名または FQN）
@@ -1231,7 +1228,7 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * プリミティブ型または String かどうかを判定します（配列は要素型で再帰判定） String を含むのは、IDL の string 型が Java の String にマップされ、
+   * プリミティブ型または String かどうかを判定（配列は要素型で再帰判定） String を含むのは、IDL の string 型が Java の String にマップされ、
    * DTO 変換不要のプリミティブ相当として扱うためです
    */
   private static boolean isPrimitiveType(String type) {
@@ -1253,7 +1250,7 @@ public class SpringBootProjectGenerator {
     }
   }
 
-  /** Holder 型（CORBA out/inout パラメーター）かどうかを判定します 単純名が {@code "Holder"} で終わるクラスを Holder 型とみなします */
+  /** Holder 型（CORBA out/inout パラメーター）かどうかを判定 単純名が {@code "Holder"} で終わるクラスを Holder 型とみな */
   private static boolean isHolderType(String typeName) {
     return simpleName(typeName).endsWith("Holder");
   }

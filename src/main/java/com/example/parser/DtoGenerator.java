@@ -18,9 +18,9 @@ import javax.lang.model.element.Modifier;
  */
 public class DtoGenerator {
   /**
-   * DTOクラスを生成し、指定ディレクトリに出力する
+   * スタブクラスからDTOクラスを生成し、指定ディレクトリに出力する
    *
-   * @param clazz 解析済みクラス定義（IDL由来）
+   * @param clazz スタブクラス定義
    * @param outputDir 出力先ディレクトリ
    */
   public static void generate(ClassOrInterfaceDeclaration clazz, Path outputDir, String basePackage)
@@ -34,8 +34,6 @@ public class DtoGenerator {
     TypeSpec.Builder typeBuilder = TypeSpec.classBuilder(dtoName).addModifiers(Modifier.PUBLIC);
 
     for (FieldDeclaration field : clazz.getFields()) {
-      // getElementType() は [] を落とすため、変数ごとの型 (v.getType()) を使う
-      // 例: "int relatedIds[]" → v.getType().asString() = "int[]"
       field
           .getVariables()
           .forEach(
@@ -51,7 +49,6 @@ public class DtoGenerator {
               });
     }
 
-    // Javaファイルとして出力する
     JavaFile javaFile = JavaFile.builder(dtoPackage, typeBuilder.build()).build();
     javaFile.writeTo(outputDir);
   }
@@ -63,7 +60,7 @@ public class DtoGenerator {
    * @return 変換後の型名
    */
   private static String convertType(String type) {
-    // 配列型: 要素型を変換して [] を戻す (例: int[] → int[], FooClass[] → FooClassDto[])
+    // 配列: 剥がして再帰する
     if (type.endsWith("[]")) {
       return convertType(type.substring(0, type.length() - 2)) + "[]";
     }
@@ -72,13 +69,12 @@ public class DtoGenerator {
       return "AnyValue";
     }
 
-    // 完全修飾名: 末尾の単純名に Dto を付与する
+    // 完全修飾名: 末尾の単純名からDtoへ置換する
     if (type.contains(".")) {
       return type.substring(type.lastIndexOf(".") + 1) + "Dto";
     }
 
-    // 単純名: 組み込み型でなければ独自型として Dto を付与する
-    // グローバルスコープ由来の型は import で参照されるため完全修飾名を持たない
+    // 単純名: 組み込み型でなければ独自型としてDtoへ置換する
     if (!isBuiltinJavaType(type)) {
       return type + "Dto";
     }
@@ -86,6 +82,12 @@ public class DtoGenerator {
     return type;
   }
 
+  /**
+   * Java組み込み型であるか否か判定する
+   * 
+   * @param type 型名
+   * @return 判定結果
+   */
   private static boolean isBuiltinJavaType(String type) {
     switch (type) {
       case "int":
@@ -112,10 +114,11 @@ public class DtoGenerator {
    * @return TypeName
    */
   private static TypeName toTypeName(String type, String dtoPackage) {
-    // 配列型: 要素型を再帰解決して ArrayTypeName を返す
+    // 配列型: 要素型を再帰してArrayTypeNameとして返す
     if (type.endsWith("[]")) {
       return ArrayTypeName.of(toTypeName(type.substring(0, type.length() - 2), dtoPackage));
     }
+
     return switch (type) {
       case "int" -> TypeName.INT;
       case "long" -> TypeName.LONG;
