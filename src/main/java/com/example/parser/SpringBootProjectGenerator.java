@@ -87,11 +87,10 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * プロジェクトの共通部分（ディレクトリ・ビルドファイル・共有クラス・スタブ・構造体 DTO/Mapper）を生成し、 
-   * 出力先のレイアウト情報を返
+   * プロジェクトの共通部分を生成し、出力先のレイアウト情報を返す
    *
    * @param stubSourceRoot スタブのルートディレクトリ
-   * @param outputDir Spring Boot プロジェクトの出力先
+   * @param outputDir SpringBootプロジェクトの出力先
    * @param basePkgName ベースパッケージ名
    * @return 生成先ディレクトリ群を保持するレイアウト情報
    */
@@ -199,8 +198,9 @@ public class SpringBootProjectGenerator {
 
   // MARK: 雛形ファイル出力
 
-  /** build.gradleを出力する
-   * 
+  /**
+   * build.gradleを出力する
+   *
    * @param outputDir 出力先ディレクトリ
    */
   private static void writeBuildGradle(Path outputDir) throws IOException {
@@ -242,7 +242,7 @@ public class SpringBootProjectGenerator {
 
   /**
    * Spring Boot エントリポイントクラスを出力する
-   * 
+   *
    * @param basePkgName 基礎パッケージ名
    * @param pkgBaseDir 出力先ディレクトリ
    */
@@ -275,7 +275,7 @@ public class SpringBootProjectGenerator {
 
   /**
    * ServletInitializer を出力する
-   * 
+   *
    * @param basePkgName 基礎パッケージ名
    * @param pkgBaseDir 出力先ディレクトリ
    */
@@ -422,7 +422,7 @@ public class SpringBootProjectGenerator {
   }
 
   // MARK: 動的ファイル生成
-  
+
   /**
    * CORBAサービス呼び出しをラップするCorbaClientクラスを生成
    *
@@ -442,68 +442,92 @@ public class SpringBootProjectGenerator {
       String clientClassName)
       throws IOException {
 
-    StringBuilder sb = new StringBuilder();
-    sb.append("package ").append(basePackage).append(".corba;\n\n");
-    sb.append("import org.omg.CORBA.ORB;\n");
-    sb.append("import org.omg.CORBA.Object;\n");
-    sb.append("import org.springframework.beans.factory.annotation.Value;\n");
-    sb.append("import org.springframework.stereotype.Component;\n");
-    if (!servicePackage.isEmpty()) {
-      sb.append("import ").append(servicePackage).append(".").append(serviceName).append(";\n");
-      sb.append("import ")
-          .append(servicePackage)
-          .append(".")
-          .append(serviceName)
-          .append("Helper;\n");
-    }
-    sb.append("\n@Component\npublic class ").append(clientClassName).append(" {\n");
-    sb.append("    private final ").append(serviceName).append(" service;\n\n");
-    sb.append("    public ")
-        .append(clientClassName)
-        .append("(@Value(\"${corba.")
-        .append(serviceName)
-        .append(".ior}\") String ior) {\n");
-    sb.append("        ORB orb = ORB.init(new String[0], null);\n");
-    sb.append("        org.omg.CORBA.Object obj = orb.string_to_object(ior);\n");
-    sb.append("        this.service = ").append(serviceName).append("Helper.narrow(obj);\n");
-    sb.append("    }\n\n");
+    String serviceImports =
+        servicePackage.isEmpty()
+            ? ""
+            : """
+          import %s.%s;
+          import %s.%sHelper;
+          """
+                .formatted(servicePackage, serviceName, servicePackage, serviceName);
 
-    for (MethodDeclaration method : methods) {
-      String returnType = method.getType().asString();
-      sb.append("    public ")
-          .append(resolveTypeFQN(returnType, method, servicePackage))
-          .append(" ")
-          .append(method.getNameAsString())
-          .append("(");
-      for (int i = 0; i < method.getParameters().size(); i++) {
-        Parameter p = method.getParameters().get(i);
-        if (i > 0) sb.append(", ");
-        sb.append(resolveTypeFQN(p.getType().asString(), method, servicePackage))
-            .append(" ")
-            .append(p.getNameAsString());
-      }
-      sb.append(") {\n");
-      // void メソッドは return なし
-      String callPrefix =
-          "void".equals(returnType) ? "        service." : "        return service.";
-      sb.append(callPrefix).append(method.getNameAsString()).append("(");
-      sb.append(
-          method.getParameters().stream()
-              .map(Parameter::getNameAsString)
-              .collect(Collectors.joining(", ")));
-      sb.append(");\n    }\n\n");
-    }
-    sb.append("}\n");
+    String methodsCode =
+        methods.stream()
+            .map(
+                method -> {
+                  String returnType = method.getType().asString();
+                  String params =
+                      method.getParameters().stream()
+                          .map(
+                              p ->
+                                  resolveTypeFQN(p.getType().asString(), method, servicePackage)
+                                      + " "
+                                      + p.getNameAsString())
+                          .collect(Collectors.joining(", "));
+                  String args =
+                      method.getParameters().stream()
+                          .map(Parameter::getNameAsString)
+                          .collect(Collectors.joining(", "));
+                  String call =
+                      ("void".equals(returnType) ? "service." : "return service.")
+                          + method.getNameAsString()
+                          + "("
+                          + args
+                          + ")";
+                  return """
+              public %s %s(%s) {
+                  %s;
+              }
+
+          """
+                      .formatted(
+                          resolveTypeFQN(returnType, method, servicePackage),
+                          method.getNameAsString(),
+                          params,
+                          call);
+                })
+            .collect(Collectors.joining());
+
+    String source =
+        """
+        package %s.corba;
+
+        import org.omg.CORBA.ORB;
+        import org.omg.CORBA.Object;
+        import org.springframework.beans.factory.annotation.Value;
+        import org.springframework.stereotype.Component;
+        %s
+        @Component
+        public class %s {
+            private final %s service;
+
+            public %s(@Value("${corba.%s.ior}") String ior) {
+                ORB orb = ORB.init(new String[0], null);
+                org.omg.CORBA.Object obj = orb.string_to_object(ior);
+                this.service = %sHelper.narrow(obj);
+            }
+
+        %s}
+        """
+            .formatted(
+                basePackage,
+                serviceImports,
+                clientClassName,
+                serviceName,
+                clientClassName,
+                serviceName,
+                serviceName,
+                methodsCode);
 
     Files.writeString(
         corbaDir.resolve(clientClassName + ".java"),
-        sb.toString(),
+        source,
         StandardOpenOption.CREATE,
         StandardOpenOption.TRUNCATE_EXISTING);
   }
 
   /**
-   * Spring MVC コントローラークラスを生成 メソッドごとに {@link #appendControllerMethod} を呼び出してコードを組み立てます
+   * Spring MVC コントローラークラスを生成 メソッドごとに {@link #buildControllerMethod} を呼び出してコードを組み立てます
    *
    * @param serviceName サービス名
    * @param servicePackage サービスが属するパッケージ
@@ -528,25 +552,24 @@ public class SpringBootProjectGenerator {
     String controllerName = serviceName + "Controller";
     String dtoPackage = basePackage + ".dto";
     String clientFqn = basePackage + ".corba." + clientClassName;
-    StringBuilder methodsCode = new StringBuilder();
 
-    for (MethodDeclaration method : methods) {
-      appendControllerMethod(
-          methodsCode, method, basePackage, dtoPackage, servicePackage, returnAsDto, stubRoot);
-    }
+    String methodsCode =
+        methods.stream()
+            .map(
+                method ->
+                    buildControllerMethod(
+                        method, basePackage, dtoPackage, servicePackage, returnAsDto, stubRoot))
+            .collect(Collectors.joining());
 
-    // フィールドとコンストラクターインジェクション
     String fieldAndCtor =
-        "    private final "
-            + clientFqn
-            + " client;\n\n"
-            + "    public "
-            + controllerName
-            + "("
-            + clientFqn
-            + " client) {\n"
-            + "        this.client = client;\n"
-            + "    }\n";
+        """
+            private final %s client;
+
+            public %s(%s client) {
+                this.client = client;
+            }
+        """
+            .formatted(clientFqn, controllerName, clientFqn);
 
     String controller =
         """
@@ -574,7 +597,7 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * コントローラーメソッド1つ分のコードを {@code sb} に追記
+   * コントローラーメソッド1つ分のコード文字列を返す。
    *
    * <p>out引数（Holder型）の有無で挙動が変わります:
    *
@@ -583,8 +606,7 @@ public class SpringBootProjectGenerator {
    *   <li>out引数あり: 空の Holder を生成して CORBA を呼び出し、 戻り値と out 引数をまとめた ResponseDto を返すメソッドを生成
    * </ul>
    */
-  private static void appendControllerMethod(
-      StringBuilder sb,
+  private static String buildControllerMethod(
       MethodDeclaration method,
       String basePackage,
       String dtoPackage,
@@ -599,23 +621,21 @@ public class SpringBootProjectGenerator {
     boolean hasInParams =
         method.getParameters().stream().anyMatch(p -> !isHolderType(p.getType().asString()));
     String requestDtoType = dtoPackage + "." + capitalize(methodName) + "RequestDto";
+    String controllerReturnType =
+        resolveControllerReturnType(
+            method, basePackage, dtoPackage, servicePackage, returnAsDto, hasOutParams);
+    String reqParam = hasInParams ? "@RequestBody " + requestDtoType + " req" : "";
 
-    // シグネチャ
-    sb.append("    @PostMapping(\"/").append(methodName).append("\")\n");
-    sb.append("    public ")
-        .append(
-            resolveControllerReturnType(
-                method, basePackage, dtoPackage, servicePackage, returnAsDto, hasOutParams))
-        .append(" ")
-        .append(methodName)
-        .append("(");
-    if (hasInParams) {
-      sb.append("@RequestBody ").append(requestDtoType).append(" req");
-    }
-    sb.append(") {\n");
+    String signature =
+        """
+            @PostMapping("/%s")
+            public %s %s(%s) {
+        """
+            .formatted(methodName, controllerReturnType, methodName, reqParam);
 
     // 引数変換（in引数: DTO→CORBA変換、out引数: 空 Holder を生成）
     List<String> argNames = new ArrayList<>();
+    StringBuilder argConversions = new StringBuilder();
     for (int i = 0; i < method.getParameters().size(); i++) {
       Parameter param = method.getParameters().get(i);
       String argName = "arg" + i;
@@ -623,62 +643,60 @@ public class SpringBootProjectGenerator {
       if (isHolderType(param.getType().asString())) {
         // out引数: 呼び出し前に空 Holder を生成し、呼び出し後に .value を取り出す
         String holderFqn = resolveTypeFQN(param.getType().asString(), method, servicePackage);
-        sb.append("        ")
-            .append(holderFqn)
-            .append(" ")
-            .append(argName)
-            .append(" = new ")
-            .append(holderFqn)
-            .append("();\n");
+        argConversions.append(
+            "        %s %s = new %s();\n".formatted(holderFqn, argName, holderFqn));
       } else {
-        appendInArgConversion(sb, param, argName, "req", basePackage, servicePackage, method);
+        argConversions.append(
+            buildInArgConversion(param, argName, "req", basePackage, servicePackage, method));
       }
     }
 
     String callArgs = String.join(", ", argNames);
+    String body;
 
     if (hasOutParams) {
       // CORBA 呼び出し後に ResponseDto を構築して返す
-      if (!"void".equals(returnType)) {
-        sb.append("        ")
-            .append(resolveTypeFQN(returnType, method, servicePackage))
-            .append(" callResult = client.")
-            .append(methodName)
-            .append("(")
-            .append(callArgs)
-            .append(");\n");
-      } else {
-        sb.append("        client.").append(methodName).append("(").append(callArgs).append(");\n");
-      }
-      appendOutParamResponseDto(
-          sb,
-          method,
-          returnType,
-          argNames,
-          dtoPackage,
-          basePackage,
-          servicePackage,
-          returnAsDto,
-          stubRoot);
-
+      String callLine =
+          "void".equals(returnType)
+              ? "        client.%s(%s);\n".formatted(methodName, callArgs)
+              : "        %s callResult = client.%s(%s);\n"
+                  .formatted(
+                      resolveTypeFQN(returnType, method, servicePackage), methodName, callArgs);
+      body =
+          callLine
+              + buildOutParamResponseDto(
+                  method,
+                  returnType,
+                  argNames,
+                  dtoPackage,
+                  basePackage,
+                  servicePackage,
+                  returnAsDto,
+                  stubRoot);
     } else if ("void".equals(returnType)) {
-      sb.append("        client.").append(methodName).append("(").append(callArgs).append(");\n");
-      sb.append("        return java.util.Collections.singletonMap(\"status\", \"ok\");\n");
-
+      body =
+          "        client.%s(%s);\n        return java.util.Collections.singletonMap(\"status\", \"ok\");\n"
+              .formatted(methodName, callArgs);
     } else {
-      appendDirectReturn(
-          sb, method, returnType, callArgs, basePackage, dtoPackage, servicePackage, returnAsDto);
+      body =
+          buildDirectReturn(
+              method, returnType, callArgs, basePackage, dtoPackage, servicePackage, returnAsDto);
     }
 
-    sb.append("    }\n\n");
+    String closing =
+        """
+            }
+
+        """;
+
+    return signature + argConversions + body + closing;
   }
 
   /**
-   * out引数を持つメソッドのレスポンスDTO構築コードを追記 CORBA 呼び出し後の {@code callResult} と各 {@code Holder.value} を
-   * ResponseDto フィールドに詰めて返
+   * out引数を持つメソッドのレスポンスDTO構築コード文字列を返す。CORBA 呼び出し後の {@code callResult} と各 {@code Holder.value} を
+   * ResponseDto フィールドに詰めて返す。
    */
-  private static void appendOutParamResponseDto(
-      StringBuilder sb,
+  private static String buildOutParamResponseDto(
       MethodDeclaration method,
       String returnType,
       List<String> argNames,
@@ -690,16 +708,14 @@ public class SpringBootProjectGenerator {
 
     String responseDtoType =
         dtoPackage + "." + capitalize(method.getNameAsString()) + "ResponseDto";
-    sb.append("        ")
-        .append(responseDtoType)
-        .append(" res = new ")
-        .append(responseDtoType)
-        .append("();\n");
+    StringBuilder sb = new StringBuilder();
+    sb.append("        %s res = new %s();\n".formatted(responseDtoType, responseDtoType));
 
     if (!"void".equals(returnType)) {
-      sb.append("        res.returnValue = ")
-          .append(corbaToDtoExpr("callResult", returnType, basePackage, dtoPackage, returnAsDto))
-          .append(";\n");
+      sb.append(
+          "        res.returnValue = %s;\n"
+              .formatted(
+                  corbaToDtoExpr("callResult", returnType, basePackage, dtoPackage, returnAsDto)));
     }
 
     for (int i = 0; i < method.getParameters().size(); i++) {
@@ -707,21 +723,24 @@ public class SpringBootProjectGenerator {
       if (!isHolderType(param.getType().asString())) continue;
       String valueType =
           resolveHolderValueType(param.getType().asString(), method, servicePackage, stubRoot);
-      sb.append("        res.")
-          .append(param.getNameAsString())
-          .append(" = ")
-          .append(
-              corbaToDtoExpr(
-                  argNames.get(i) + ".value", valueType, basePackage, dtoPackage, returnAsDto))
-          .append(";\n");
+      sb.append(
+          "        res.%s = %s;\n"
+              .formatted(
+                  param.getNameAsString(),
+                  corbaToDtoExpr(
+                      argNames.get(i) + ".value",
+                      valueType,
+                      basePackage,
+                      dtoPackage,
+                      returnAsDto)));
     }
 
     sb.append("        return res;\n");
+    return sb.toString();
   }
 
-  /** out引数なし・非void メソッドの return 文を追記 戻り型に応じて primitive/String/Any/独自型・配列を使い分けます */
-  private static void appendDirectReturn(
-      StringBuilder sb,
+  /** out引数なし・非void メソッドの return 文を返す。戻り型に応じて primitive/String/Any/独自型・配列を使い分けます。 */
+  private static String buildDirectReturn(
       MethodDeclaration method,
       String returnType,
       String callArgs,
@@ -733,39 +752,20 @@ public class SpringBootProjectGenerator {
     String methodName = method.getNameAsString();
 
     if (isPrimitiveType(returnType)) {
-      sb.append("        return client.")
-          .append(methodName)
-          .append("(")
-          .append(callArgs)
-          .append(");\n");
+      return "        return client.%s(%s);\n".formatted(methodName, callArgs);
     } else if ("org.omg.CORBA.Any".equals(returnType)) {
-      if (returnAsDto) {
-        sb.append("        return ")
-            .append(basePackage)
-            .append(".mapper.AnyMapper.toAnyValue(client.")
-            .append(methodName)
-            .append("(")
-            .append(callArgs)
-            .append("));\n");
-      } else {
-        sb.append("        return client.")
-            .append(methodName)
-            .append("(")
-            .append(callArgs)
-            .append(");\n");
-      }
+      return returnAsDto
+          ? "        return %s.mapper.AnyMapper.toAnyValue(client.%s(%s));\n"
+              .formatted(basePackage, methodName, callArgs)
+          : "        return client.%s(%s);\n".formatted(methodName, callArgs);
     } else {
       // 独自型または配列: result 変数に受けてから変換する
-      sb.append("        ")
-          .append(resolveTypeFQN(returnType, method, servicePackage))
-          .append(" result = client.")
-          .append(methodName)
-          .append("(")
-          .append(callArgs)
-          .append(");\n");
-      sb.append("        return ")
-          .append(corbaToDtoExpr("result", returnType, basePackage, dtoPackage, returnAsDto))
-          .append(";\n");
+      return "        %s result = client.%s(%s);\n        return %s;\n"
+          .formatted(
+              resolveTypeFQN(returnType, method, servicePackage),
+              methodName,
+              callArgs,
+              corbaToDtoExpr("result", returnType, basePackage, dtoPackage, returnAsDto));
     }
   }
 
@@ -790,7 +790,7 @@ public class SpringBootProjectGenerator {
         // out引数はリクエストボディから除外する
         continue;
       }
-      
+
       String fieldType = mapToDtoType(basePkgName, param.getType().asString());
       typeBuilder.addField(
           FieldSpec.builder(
@@ -862,13 +862,14 @@ public class SpringBootProjectGenerator {
    */
   private static void writeApplicationProperties(Path outputDir, List<String> serviceNames)
       throws IOException {
-    StringBuilder sb = new StringBuilder("corba:\n");
-    for (String name : serviceNames) {
-      sb.append("  ").append(name).append(":\n    ior:\n");
-    }
+    String content =
+        "corba:\n"
+            + serviceNames.stream()
+                .map(n -> "  %s:\n    ior:\n".formatted(n))
+                .collect(Collectors.joining());
     Files.writeString(
         outputDir.resolve("src/main/resources/application.yml"),
-        sb.toString(),
+        content,
         StandardOpenOption.CREATE,
         StandardOpenOption.TRUNCATE_EXISTING);
   }
@@ -901,9 +902,7 @@ public class SpringBootProjectGenerator {
     return structs;
   }
 
-  /**
-   * DTO/Mapper 生成対象の構造体クラスかどうかを判定 インターフェース・各種 idlj 生成クラス（Helper/Holder/POA 等）・メソッドを持つクラスは除外
-   */
+  /** DTO/Mapper 生成対象の構造体クラスかどうかを判定 インターフェース・各種 idlj 生成クラス（Helper/Holder/POA 等）・メソッドを持つクラスは除外 */
   private static boolean isTargetStruct(ClassOrInterfaceDeclaration clazz) {
     if (clazz.isInterface()) return false;
     String name = clazz.getNameAsString();
@@ -917,7 +916,7 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * in引数1つ分の DTO→CORBA 変換コードを {@code sb} に追記 Holder型（out引数）はこのメソッドの対象外です
+   * in引数1つ分の DTO→CORBA 変換コード文字列を返す。Holder型（out引数）はこのメソッドの対象外です。
    *
    * <ul>
    *   <li>プリミティブ/String: {@code req} フィールドをそのまま代入
@@ -926,8 +925,7 @@ public class SpringBootProjectGenerator {
    *   <li>独自型: {@code XxxMapper.fromDto()} で変換
    * </ul>
    */
-  private static void appendInArgConversion(
-      StringBuilder sb,
+  private static String buildInArgConversion(
       Parameter param,
       String argName,
       String handlerName,
@@ -940,56 +938,21 @@ public class SpringBootProjectGenerator {
     String fieldRef = handlerName + "." + param.getNameAsString();
 
     if (isPrimitiveType(paramType)) {
-      sb.append("        ")
-          .append(paramType)
-          .append(" ")
-          .append(argName)
-          .append(" = ")
-          .append(fieldRef)
-          .append(";\n");
+      return "        %s %s = %s;\n".formatted(paramType, argName, fieldRef);
     } else if ("org.omg.CORBA.Any".equals(paramType)) {
-      sb.append("        org.omg.CORBA.Any ")
-          .append(argName)
-          .append(" = ")
-          .append(basePackage)
-          .append(".mapper.AnyMapper.toAny(")
-          .append(fieldRef)
-          .append(");\n");
+      return "        org.omg.CORBA.Any %s = %s.mapper.AnyMapper.toAny(%s);\n"
+          .formatted(argName, basePackage, fieldRef);
     } else if (paramSimple.endsWith("[]")) {
       String elemSimple = paramSimple.substring(0, paramSimple.length() - 2);
       String fqnParam = resolveTypeFQN(paramType, method, servicePackage);
       String elemFqn =
           fqnParam.endsWith("[]") ? fqnParam.substring(0, fqnParam.length() - 2) : fqnParam;
-      sb.append("        ")
-          .append(fqnParam)
-          .append(" ")
-          .append(argName)
-          .append(" = ")
-          .append(fieldRef)
-          .append(" == null ? null : java.util.Arrays.stream(")
-          .append(fieldRef)
-          .append(")")
-          .append(".map(")
-          .append(basePackage)
-          .append(".mapper.")
-          .append(elemSimple)
-          .append("Mapper::fromDto)")
-          .append(".toArray(")
-          .append(elemFqn)
-          .append("[]::new);\n");
+      return "        %s %s = %s == null ? null : java.util.Arrays.stream(%s).map(%s.mapper.%sMapper::fromDto).toArray(%s[]::new);\n"
+          .formatted(fqnParam, argName, fieldRef, fieldRef, basePackage, elemSimple, elemFqn);
     } else {
       String fqnParam = resolveTypeFQN(paramType, method, servicePackage);
-      sb.append("        ")
-          .append(fqnParam)
-          .append(" ")
-          .append(argName)
-          .append(" = ")
-          .append(basePackage)
-          .append(".mapper.")
-          .append(paramSimple)
-          .append("Mapper.fromDto(")
-          .append(fieldRef)
-          .append(");\n");
+      return "        %s %s = %s.mapper.%sMapper.fromDto(%s);\n"
+          .formatted(fqnParam, argName, basePackage, paramSimple, fieldRef);
     }
   }
 
@@ -1164,8 +1127,8 @@ public class SpringBootProjectGenerator {
    * Holder 型（CORBA out/inout パラメーター）の {@code value} フィールドの型名を返
    *
    * <p>CORBA プリミティブ Holder（{@code org.omg.CORBA.IntHolder} 等）はハードコードで対応し、 独自 Holder はスタブファイルを解析して
-   * {@code value} フィールドの型を取得 idlj は sequence typedef に対して配列型の {@code value} フィールドを生成するため （例:
-   * {@code GlobalTag value[]}）、ファイル解析が必要です
+   * {@code value} フィールドの型を取得 idlj は sequence typedef に対して配列型の {@code value} フィールドを生成するため （例: {@code
+   * GlobalTag value[]}）、ファイル解析が必要です
    *
    * @param holderType Holder 型の名前（単純名または FQN）
    * @param method 型が参照されているメソッド宣言
@@ -1228,8 +1191,8 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * プリミティブ型または String かどうかを判定（配列は要素型で再帰判定） String を含むのは、IDL の string 型が Java の String にマップされ、
-   * DTO 変換不要のプリミティブ相当として扱うためです
+   * プリミティブ型または String かどうかを判定（配列は要素型で再帰判定） String を含むのは、IDL の string 型が Java の String にマップされ、 DTO
+   * 変換不要のプリミティブ相当として扱うためです
    */
   private static boolean isPrimitiveType(String type) {
     if (type == null) return false;

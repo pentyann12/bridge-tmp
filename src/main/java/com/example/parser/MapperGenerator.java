@@ -63,8 +63,10 @@ public class MapperGenerator {
         boolean isArray = v.getType().asString().endsWith("[]");
 
         if (isAny) {
-          toDtoBody.addStatement("dto.$N = $T.toAnyValue($N.$N)", nameField, anyMapperClass, "src", nameField);
-          fromDtoBody.addStatement("dst.$N = $T.toAny(src.$N)", nameField, anyMapperClass, nameField);
+          toDtoBody.addStatement(
+              "dto.$N = $T.toAnyValue($N.$N)", nameField, anyMapperClass, "src", nameField);
+          fromDtoBody.addStatement(
+              "dst.$N = $T.toAny(src.$N)", nameField, anyMapperClass, nameField);
         } else if (isPrimitive) {
           toDtoBody.addStatement("dto.$N = $N.$N", nameField, "src", nameField);
           fromDtoBody.addStatement("dst.$N = src.$N", nameField, nameField);
@@ -72,7 +74,7 @@ public class MapperGenerator {
           // 独自型の配列: 各要素を対応する Mapper で変換する
           ClassName nestedMapperClass = ClassName.get(basePackage + ".mapper", simple + "Mapper");
           ClassName dtoElemClass = ClassName.get(dtoPackage, simple + "Dto");
-          
+
           // 要素型のパッケージを含む構造体のimport文から逆引きする。
           // NOTE:
           // グローバルスコープ由来で別パッケージに再配置された型の場合、
