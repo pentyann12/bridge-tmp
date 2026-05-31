@@ -10,11 +10,9 @@ import javax.lang.model.element.Modifier;
 /**
  * DTO生成クラス
  *
- * JavaParserで解析したIDL由来のクラス情報をもとに、 JavaPoetを使用してDTOクラスを生成する
+ * <p>JavaParserで解析したIDL由来のクラス情報をもとに、 JavaPoetを使用してDTOクラスを生成する
  *
- * - クラス名からDTOクラス名への変換
- * - フィールド型を変換（CORBA.Any → Object）
- * - Javaソースコード生成とファイル出力
+ * <p>- クラス名からDTOクラス名への変換 - フィールド型を変換（CORBA.Any → Object） - Javaソースコード生成とファイル出力
  */
 public class DtoGenerator {
   /**
@@ -84,7 +82,7 @@ public class DtoGenerator {
 
   /**
    * Java組み込み型であるか否か判定する
-   * 
+   *
    * @param type 型名
    * @return 判定結果
    */
