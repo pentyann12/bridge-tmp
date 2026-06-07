@@ -104,6 +104,7 @@ public class SpringBootProjectGenerator {
     StubHandler.copyIdlStubSources(stubSourceRoot, javaDir);
     AnyTypeWriter.writeAnyValueDto(dtoDir, basePkgName);
     AnyTypeWriter.writeAnyMapper(mapperDir, basePkgName);
+    StringMapperWriter.write(mapperDir, basePkgName);
 
     for (ClassOrInterfaceDeclaration structClass :
         StubHandler.collectStructClasses(stubSourceRoot)) {
@@ -141,6 +142,8 @@ public class SpringBootProjectGenerator {
             .orElse("");
 
     List<MethodDeclaration> methods = serviceIface.getMethods();
+    // メソッドがないサービスはクライアントもコントローラーも生成しない
+    if (methods.isEmpty()) return;
     for (MethodDeclaration method : methods) {
       ServiceDtoWriter.generateRequestDto(method, layout.javaDir, basePkgName);
       boolean hasOutParams =

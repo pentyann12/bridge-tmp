@@ -16,7 +16,7 @@
 2. **コマンドの実行**: 以下のコマンドを実行して、IDLファイルからJavaスタブを生成し、サービスインターフェースを抽出してSpring Bootプロジェクトを作成します。
 
 ```powershell
-.\gradlew.bat run --console=plain --args="gen-spring --stub-root=generated-stubs --output-root=generated-spring --base-package=com.bridge --idl-package-prefix=com.corba --return-mode=raw idl/service.idl"
+.\gradlew.bat run --console=plain --args="--stub-root=generated-stubs --output-root=generated-spring --base-package=com.bridge --idl-package-prefix=com.corba --return-mode=dto --single-project --project-name=BridgeServer idl/service.idl"
 ```
 
 このコマンドの引数は以下の通りです：

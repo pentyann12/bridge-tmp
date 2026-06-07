@@ -189,18 +189,24 @@ final class CorbaTypeUtils {
   /**
    * CORBA 値を DTO へ変換する式（代入 RHS として使える文字列）を返す
    *
-   * <p>{@code returnAsDto=false} またはプリミティブ/String/Any の場合は {@code rhs} をそのまま返す 配列型は {@code
-   * Arrays.stream().map(Mapper::toDto).toArray()} 形式、 独自型は {@code XxxMapper.toDto(rhs)} 形式になります
+   * <p>String は {@code returnAsDto} フラグに関係なく常に {@code StringMapper.encode()} でエンコードします
+   * （CORBA の文字列は ISO-8859-1 として渡される SJIS バイト列のため）。 それ以外のプリミティブ/Any は {@code returnAsDto=false}
+   * のときそのまま返します。 配列型は {@code Arrays.stream().map(Mapper::toDto).toArray()} 形式、 独自型は {@code
+   * XxxMapper.toDto(rhs)} 形式になります
    *
    * @param rhs 変換元の式（例: "result", "arg0.value"）
    * @param valueType CORBA 側の型名（配列型 "Foo[]" でも可）
    * @param basePackage ベースパッケージ名
    * @param dtoPackage DTO パッケージ名
-   * @param returnAsDto false の場合は変換を行わず rhs をそのまま返す
+   * @param returnAsDto false の場合は String 以外の変換を行わず rhs をそのまま返す
    * @return 代入 RHS として使える式文字列
    */
   static String corbaToDtoExpr(
       String rhs, String valueType, String basePackage, String dtoPackage, boolean returnAsDto) {
+    // String は CORBA の文字コード（ISO-8859-1 として渡される SJIS バイト）を SJIS として再解釈する
+    if ("String".equals(valueType)) {
+      return basePackage + ".mapper.StringMapper.encode(" + rhs + ")";
+    }
     if (!returnAsDto || isPrimitiveType(valueType) || "org.omg.CORBA.Any".equals(valueType)) {
       return rhs;
     }

@@ -105,4 +105,5 @@ final class AnyTypeWriter {
         StandardOpenOption.CREATE,
         StandardOpenOption.TRUNCATE_EXISTING);
   }
+
 }

@@ -51,6 +51,7 @@ public class MapperGenerator {
             .addStatement("$T dst = new $T()", corbaClass, corbaClass);
 
     ClassName anyMapperClass = ClassName.get(basePackage + ".mapper", "AnyMapper");
+    ClassName stringMapperClass = ClassName.get(basePackage + ".mapper", "StringMapper");
 
     for (FieldDeclaration field : clazz.getFields()) {
       String type = field.getElementType().asString();
@@ -67,10 +68,29 @@ public class MapperGenerator {
               "dto.$N = $T.toAnyValue($N.$N)", nameField, anyMapperClass, "src", nameField);
           fromDtoBody.addStatement(
               "dst.$N = $T.toAny(src.$N)", nameField, anyMapperClass, nameField);
-        } else if (isPrimitive) {
-          toDtoBody.addStatement("dto.$N = $N.$N", nameField, "src", nameField);
+        } else if (isPrimitive && !isArray) {
+          // String は CORBA から取得時に SJIS として再エンコードする（スカラーのみ）
+          if ("String".equals(simple)) {
+            toDtoBody.addStatement(
+                "dto.$N = $T.encode($N.$N)", nameField, stringMapperClass, "src", nameField);
+          } else {
+            toDtoBody.addStatement("dto.$N = $N.$N", nameField, "src", nameField);
+          }
           fromDtoBody.addStatement("dst.$N = src.$N", nameField, nameField);
         } else if (isArray) {
+          if ("String[]".equals(v.getType().asString())) {
+            // 1次元 String[] の各要素を StringMapper.encode() でエンコードする
+            // NOTE: String[][] 等の多次元配列は field.getElementType() も "String" を返すため
+            // v.getType() で次元数を判定する必要がある
+            toDtoBody.addStatement(
+                "dto.$N = src.$N == null ? null : java.util.Arrays.stream(src.$N).map($T::encode).toArray(String[]::new)",
+                nameField, nameField, nameField, stringMapperClass);
+            fromDtoBody.addStatement("dst.$N = src.$N", nameField, nameField);
+          } else if (isPrimitive) {
+            // int[] 等のプリミティブ配列、または多次元 String[][] はそのままコピー
+            toDtoBody.addStatement("dto.$N = src.$N", nameField, nameField);
+            fromDtoBody.addStatement("dst.$N = src.$N", nameField, nameField);
+          } else {
           // 独自型の配列: 各要素を対応する Mapper で変換する
           ClassName nestedMapperClass = ClassName.get(basePackage + ".mapper", simple + "Mapper");
           ClassName dtoElemClass = ClassName.get(dtoPackage, simple + "Dto");
@@ -115,6 +135,7 @@ public class MapperGenerator {
               nameField,
               nestedMapperClass,
               corbaElemClass);
+          }
         } else {
           ClassName nestedMapperClass = ClassName.get(basePackage + ".mapper", simple + "Mapper");
           toDtoBody.addStatement(

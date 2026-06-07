@@ -15,6 +15,9 @@ import java.util.List;
  *   <li>out引数なし: 戻り値を直接返す通常の POST メソッドを生成
  *   <li>out引数あり: 空の Holder を生成して CORBA を呼び出し、 戻り値と out 引数をまとめた ResponseDto を返すメソッドを生成
  * </ul>
+ *
+ * <p>リクエストは JSON-RPC 形式（{@code {"jsonrpc":"","method":"","id":1,"params":{}}}）で受け取り、
+ * レスポンスも JSON-RPC 形式（{@code {"jsonrpc":"2.0","id":1,"result":{"return":{}}}}）で返します。
  */
 final class ControllerMethodBuilder {
   private ControllerMethodBuilder() {}
@@ -47,17 +50,21 @@ final class ControllerMethodBuilder {
         method.getParameters().stream()
             .anyMatch(p -> !CorbaTypeUtils.isHolderType(p.getType().asString()));
     String requestDtoType = dtoPackage + "." + CorbaTypeUtils.capitalize(methodName) + "RequestDto";
-    String controllerReturnType =
-        resolveControllerReturnType(
-            method, basePackage, dtoPackage, servicePackage, returnAsDto, hasOutParams);
-    String reqParam = hasInParams ? "@RequestBody " + requestDtoType + " req" : "";
+
+    // JSON-RPC 形式で受け取り、params を RequestDto に変換する
+    String reqParam = hasInParams ? "@RequestBody java.util.Map<String, Object> rpc" : "";
+    String paramsExtraction =
+        hasInParams
+            ? "        %s req = new com.fasterxml.jackson.databind.ObjectMapper().convertValue(rpc.get(\"params\"), %s.class);\n"
+                .formatted(requestDtoType, requestDtoType)
+            : "";
 
     String signature =
         """
             @PostMapping("/%s")
-            public %s %s(%s) {
+            public Object %s(%s) {
         """
-            .formatted(methodName, controllerReturnType, methodName, reqParam);
+            .formatted(methodName, methodName, reqParam);
 
     // 引数変換（in引数: DTO→CORBA変換、out引数: 空 Holder を生成）
     List<String> argNames = new ArrayList<>();
@@ -82,7 +89,7 @@ final class ControllerMethodBuilder {
     String body;
 
     if (hasOutParams) {
-      // CORBA 呼び出し後に ResponseDto を構築して返す
+      // CORBA 呼び出し後に ResponseDto を構築して JSON-RPC レスポンスで返す
       String callLine =
           "void".equals(returnType)
               ? "        client.%s(%s);\n".formatted(methodName, callArgs)
@@ -103,9 +110,7 @@ final class ControllerMethodBuilder {
                   returnAsDto,
                   stubRoot);
     } else if ("void".equals(returnType)) {
-      body =
-          "        client.%s(%s);\n        return java.util.Collections.singletonMap(\"status\", \"ok\");\n"
-              .formatted(methodName, callArgs);
+      body = "        client.%s(%s);\n".formatted(methodName, callArgs) + wrapResponse("null");
     } else {
       body =
           buildDirectReturn(
@@ -118,10 +123,13 @@ final class ControllerMethodBuilder {
 
         """;
 
-    return signature + argConversions + body + closing;
+    return signature + paramsExtraction + argConversions + body + closing;
   }
 
-  /** out引数を持つメソッドのレスポンス DTO 構築コード文字列を返す */
+  /**
+   * out引数を持つメソッドのレスポンス DTO 構築コード文字列を返す。 CORBA 呼び出し後の {@code callResult} と各 {@code Holder.value}
+   * を ResponseDto フィールドに詰め、JSON-RPC 形式でラップして返す。
+   */
   private static String buildOutParamResponseDto(
       MethodDeclaration method,
       String returnType,
@@ -163,11 +171,11 @@ final class ControllerMethodBuilder {
                       returnAsDto)));
     }
 
-    sb.append("        return res;\n");
+    sb.append(wrapResponse("res"));
     return sb.toString();
   }
 
-  /** out引数なし・非void メソッドの return 文を返す */
+  /** out引数なし・非void メソッドの return 文を JSON-RPC 形式でラップして返す */
   private static String buildDirectReturn(
       MethodDeclaration method,
       String returnType,
@@ -180,19 +188,26 @@ final class ControllerMethodBuilder {
     String methodName = method.getNameAsString();
 
     if (CorbaTypeUtils.isPrimitiveType(returnType)) {
-      return "        return client.%s(%s);\n".formatted(methodName, callArgs);
+      // String は CORBA から取得時に文字コード変換が必要
+      String valueExpr =
+          "String".equals(returnType)
+              ? "%s.mapper.StringMapper.encode(client.%s(%s))".formatted(basePackage, methodName, callArgs)
+              : "client.%s(%s)".formatted(methodName, callArgs);
+      return wrapResponse(valueExpr);
     } else if ("org.omg.CORBA.Any".equals(returnType)) {
-      return returnAsDto
-          ? "        return %s.mapper.AnyMapper.toAnyValue(client.%s(%s));\n"
-              .formatted(basePackage, methodName, callArgs)
-          : "        return client.%s(%s);\n".formatted(methodName, callArgs);
+      String valueExpr =
+          returnAsDto
+              ? "%s.mapper.AnyMapper.toAnyValue(client.%s(%s))".formatted(basePackage, methodName, callArgs)
+              : "client.%s(%s)".formatted(methodName, callArgs);
+      return wrapResponse(valueExpr);
     } else {
       // 独自型または配列: result 変数に受けてから変換する
-      return "        %s result = client.%s(%s);\n        return %s;\n"
-          .formatted(
-              CorbaTypeUtils.resolveTypeFQN(returnType, method, servicePackage),
-              methodName,
-              callArgs,
+      return "        %s result = client.%s(%s);\n"
+              .formatted(
+                  CorbaTypeUtils.resolveTypeFQN(returnType, method, servicePackage),
+                  methodName,
+                  callArgs)
+          + wrapResponse(
               CorbaTypeUtils.corbaToDtoExpr(
                   "result", returnType, basePackage, dtoPackage, returnAsDto));
     }
@@ -239,25 +254,30 @@ final class ControllerMethodBuilder {
     }
   }
 
-  /** コントローラーメソッドの戻り型文字列を解決 out引数ありなら ResponseDto、なければ CORBA 型または DTO 型を返す */
-  private static String resolveControllerReturnType(
-      MethodDeclaration method,
-      String basePackage,
-      String dtoPackage,
-      String servicePackage,
-      boolean returnAsDto,
-      boolean hasOutParams) {
-    if (hasOutParams)
-      return dtoPackage + "." + CorbaTypeUtils.capitalize(method.getNameAsString()) + "ResponseDto";
-    String returnType = method.getType().asString();
-    if ("void".equals(returnType)) return "Object";
-    if (CorbaTypeUtils.isPrimitiveType(returnType)) return returnType;
-    if ("org.omg.CORBA.Any".equals(returnType)) {
-      return returnAsDto ? basePackage + ".dto.AnyValue" : "org.omg.CORBA.Any";
-    }
-    if (!returnAsDto) return CorbaTypeUtils.resolveTypeFQN(returnType, method, servicePackage);
-    boolean isArray = returnType.endsWith("[]");
-    String elem = isArray ? returnType.substring(0, returnType.length() - 2) : returnType;
-    return dtoPackage + "." + CorbaTypeUtils.simpleName(elem) + "Dto" + (isArray ? "[]" : "");
+  /**
+   * JSON-RPC 形式のレスポンスコード文字列を生成する
+   *
+   * <p>生成例:
+   *
+   * <pre>
+   *   {
+   *     "jsonrpc": "2.0",
+   *     "id": 1,
+   *     "result": { "return": &lt;valueExpr&gt; }
+   *   }
+   * </pre>
+   *
+   * @param valueExpr {@code result.return} に設定する式（変数名またはメソッド呼び出し式）
+   */
+  private static String wrapResponse(String valueExpr) {
+    return """
+            java.util.Map<String, Object> __result = new java.util.LinkedHashMap<>();
+            __result.put("return", %s);
+            java.util.Map<String, Object> __response = new java.util.LinkedHashMap<>();
+            __response.put("jsonrpc", "2.0");
+            __response.put("id", 1);
+            __response.put("result", __result);
+            return __response;
+    """.formatted(valueExpr);
   }
 }
