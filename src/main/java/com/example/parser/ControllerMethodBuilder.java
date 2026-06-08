@@ -16,8 +16,8 @@ import java.util.List;
  *   <li>out引数あり: 空の Holder を生成して CORBA を呼び出し、 戻り値と out 引数をまとめた ResponseDto を返すメソッドを生成
  * </ul>
  *
- * <p>リクエストは JSON-RPC 形式（{@code {"jsonrpc":"","method":"","id":1,"params":{}}}）で受け取り、
- * レスポンスも JSON-RPC 形式（{@code {"jsonrpc":"2.0","id":1,"result":{"return":{}}}}）で返します。
+ * <p>リクエストは {@code XxxRpcRequest}（{@code params} フィールドに {@code XxxRequestDto}）で受け取り、
+ * レスポンスは {@code XxxRpcResponse}（{@code result.return} に実際の値）で返します。
  */
 final class ControllerMethodBuilder {
   private ControllerMethodBuilder() {}
@@ -50,21 +50,21 @@ final class ControllerMethodBuilder {
         method.getParameters().stream()
             .anyMatch(p -> !CorbaTypeUtils.isHolderType(p.getType().asString()));
     String requestDtoType = dtoPackage + "." + CorbaTypeUtils.capitalize(methodName) + "RequestDto";
+    String rpcRequestType = dtoPackage + "." + CorbaTypeUtils.capitalize(methodName) + "RpcRequest";
+    String rpcResponseFqn = dtoPackage + "." + CorbaTypeUtils.capitalize(methodName) + "RpcResponse";
+    String rpcResultFqn = dtoPackage + "." + CorbaTypeUtils.capitalize(methodName) + "RpcResult";
 
-    // JSON-RPC 形式で受け取り、params を RequestDto に変換する
-    String reqParam = hasInParams ? "@RequestBody java.util.Map<String, Object> rpc" : "";
+    // JSON-RPC 形式で受け取る: XxxRpcRequest.params が XxxRequestDto
+    String reqParam = hasInParams ? "@RequestBody " + rpcRequestType + " rpc" : "";
     String paramsExtraction =
-        hasInParams
-            ? "        %s req = new com.fasterxml.jackson.databind.ObjectMapper().convertValue(rpc.get(\"params\"), %s.class);\n"
-                .formatted(requestDtoType, requestDtoType)
-            : "";
+        hasInParams ? "        %s req = rpc.params;\n".formatted(requestDtoType) : "";
 
     String signature =
         """
             @PostMapping("/%s")
-            public Object %s(%s) {
+            public %s %s(%s) {
         """
-            .formatted(methodName, methodName, reqParam);
+            .formatted(methodName, rpcResponseFqn, methodName, reqParam);
 
     // 引数変換（in引数: DTO→CORBA変換、out引数: 空 Holder を生成）
     List<String> argNames = new ArrayList<>();
@@ -89,7 +89,7 @@ final class ControllerMethodBuilder {
     String body;
 
     if (hasOutParams) {
-      // CORBA 呼び出し後に ResponseDto を構築して JSON-RPC レスポンスで返す
+      // CORBA 呼び出し後に ResponseDto を構築して XxxRpcResponse で返す
       String callLine =
           "void".equals(returnType)
               ? "        client.%s(%s);\n".formatted(methodName, callArgs)
@@ -108,13 +108,25 @@ final class ControllerMethodBuilder {
                   basePackage,
                   servicePackage,
                   returnAsDto,
-                  stubRoot);
+                  stubRoot,
+                  rpcResponseFqn,
+                  rpcResultFqn);
     } else if ("void".equals(returnType)) {
-      body = "        client.%s(%s);\n".formatted(methodName, callArgs) + wrapResponse("null");
+      body =
+          "        client.%s(%s);\n".formatted(methodName, callArgs)
+              + wrapResponse("null", rpcResponseFqn, rpcResultFqn);
     } else {
       body =
           buildDirectReturn(
-              method, returnType, callArgs, basePackage, dtoPackage, servicePackage, returnAsDto);
+              method,
+              returnType,
+              callArgs,
+              basePackage,
+              dtoPackage,
+              servicePackage,
+              returnAsDto,
+              rpcResponseFqn,
+              rpcResultFqn);
     }
 
     String closing =
@@ -128,7 +140,7 @@ final class ControllerMethodBuilder {
 
   /**
    * out引数を持つメソッドのレスポンス DTO 構築コード文字列を返す。 CORBA 呼び出し後の {@code callResult} と各 {@code Holder.value}
-   * を ResponseDto フィールドに詰め、JSON-RPC 形式でラップして返す。
+   * を ResponseDto フィールドに詰め、{@code XxxRpcResponse} でラップして返す。
    */
   private static String buildOutParamResponseDto(
       MethodDeclaration method,
@@ -138,7 +150,9 @@ final class ControllerMethodBuilder {
       String basePackage,
       String servicePackage,
       boolean returnAsDto,
-      Path stubRoot) {
+      Path stubRoot,
+      String rpcResponseFqn,
+      String rpcResultFqn) {
 
     String responseDtoType =
         dtoPackage + "." + CorbaTypeUtils.capitalize(method.getNameAsString()) + "ResponseDto";
@@ -171,11 +185,11 @@ final class ControllerMethodBuilder {
                       returnAsDto)));
     }
 
-    sb.append(wrapResponse("res"));
+    sb.append(wrapResponse("res", rpcResponseFqn, rpcResultFqn));
     return sb.toString();
   }
 
-  /** out引数なし・非void メソッドの return 文を JSON-RPC 形式でラップして返す */
+  /** out引数なし・非void メソッドの return 文を {@code XxxRpcResponse} でラップして返す */
   private static String buildDirectReturn(
       MethodDeclaration method,
       String returnType,
@@ -183,7 +197,9 @@ final class ControllerMethodBuilder {
       String basePackage,
       String dtoPackage,
       String servicePackage,
-      boolean returnAsDto) {
+      boolean returnAsDto,
+      String rpcResponseFqn,
+      String rpcResultFqn) {
 
     String methodName = method.getNameAsString();
 
@@ -193,13 +209,13 @@ final class ControllerMethodBuilder {
           "String".equals(returnType)
               ? "%s.mapper.StringMapper.encode(client.%s(%s))".formatted(basePackage, methodName, callArgs)
               : "client.%s(%s)".formatted(methodName, callArgs);
-      return wrapResponse(valueExpr);
+      return wrapResponse(valueExpr, rpcResponseFqn, rpcResultFqn);
     } else if ("org.omg.CORBA.Any".equals(returnType)) {
       String valueExpr =
           returnAsDto
               ? "%s.mapper.AnyMapper.toAnyValue(client.%s(%s))".formatted(basePackage, methodName, callArgs)
               : "client.%s(%s)".formatted(methodName, callArgs);
-      return wrapResponse(valueExpr);
+      return wrapResponse(valueExpr, rpcResponseFqn, rpcResultFqn);
     } else {
       // 独自型または配列: result 変数に受けてから変換する
       return "        %s result = client.%s(%s);\n"
@@ -209,7 +225,9 @@ final class ControllerMethodBuilder {
                   callArgs)
           + wrapResponse(
               CorbaTypeUtils.corbaToDtoExpr(
-                  "result", returnType, basePackage, dtoPackage, returnAsDto));
+                  "result", returnType, basePackage, dtoPackage, returnAsDto),
+              rpcResponseFqn,
+              rpcResultFqn);
     }
   }
 
@@ -255,29 +273,20 @@ final class ControllerMethodBuilder {
   }
 
   /**
-   * JSON-RPC 形式のレスポンスコード文字列を生成する
+   * 型付き {@code XxxRpcResponse} を構築して return するコード文字列を生成する
    *
-   * <p>生成例:
-   *
-   * <pre>
-   *   {
-   *     "jsonrpc": "2.0",
-   *     "id": 1,
-   *     "result": { "return": &lt;valueExpr&gt; }
-   *   }
-   * </pre>
-   *
-   * @param valueExpr {@code result.return} に設定する式（変数名またはメソッド呼び出し式）
+   * @param valueExpr {@code result.return} に設定する式
+   * @param rpcResponseFqn {@code XxxRpcResponse} の完全修飾クラス名
+   * @param rpcResultFqn {@code XxxRpcResult} の完全修飾クラス名
    */
-  private static String wrapResponse(String valueExpr) {
+  private static String wrapResponse(
+      String valueExpr, String rpcResponseFqn, String rpcResultFqn) {
     return """
-            java.util.Map<String, Object> __result = new java.util.LinkedHashMap<>();
-            __result.put("return", %s);
-            java.util.Map<String, Object> __response = new java.util.LinkedHashMap<>();
-            __response.put("jsonrpc", "2.0");
-            __response.put("id", 1);
-            __response.put("result", __result);
+            %s __result = new %s();
+            __result.returnValue = %s;
+            %s __response = new %s();
+            __response.result = __result;
             return __response;
-    """.formatted(valueExpr);
+    """.formatted(rpcResultFqn, rpcResultFqn, valueExpr, rpcResponseFqn, rpcResponseFqn);
   }
 }

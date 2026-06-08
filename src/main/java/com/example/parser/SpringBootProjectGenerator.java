@@ -158,6 +158,9 @@ public class SpringBootProjectGenerator {
             servicePackage,
             layout.stubSourceRoot);
       }
+      // XxxRpcResult / XxxRpcResponse を全メソッドで生成（ResponseDto がある場合はその後に生成）
+      ServiceDtoWriter.generateRpcResponse(
+          method, layout.javaDir, basePkgName, returnAsDto, servicePackage, layout.stubSourceRoot);
     }
 
     CorbaClientWriter.write(

@@ -14,6 +14,37 @@ import java.nio.file.Path;
 final class CorbaTypeUtils {
   private CorbaTypeUtils() {}
 
+  /**
+   * JSON-RPC レスポンスの {@code result.return} フィールドの型名を返す
+   *
+   * <p>out引数ありなら {@code XxxResponseDto}、void なら {@code Object}、それ以外は戻り値型に応じた DTO / プリミティブ型を返します。
+   *
+   * @param method サービスインターフェースのメソッド宣言
+   * @param basePackage ベースパッケージ名
+   * @param dtoPackage DTO パッケージ名
+   * @param servicePackage サービスが属するパッケージ（FQN 解決のフォールバック用）
+   * @param returnAsDto 複雑な型を DTO に変換するかどうか
+   * @param hasOutParams out引数を持つかどうか
+   * @return 型名文字列
+   */
+  static String resolveRpcReturnType(
+      MethodDeclaration method,
+      String basePackage,
+      String dtoPackage,
+      String servicePackage,
+      boolean returnAsDto,
+      boolean hasOutParams) {
+    if (hasOutParams)
+      return dtoPackage + "." + capitalize(method.getNameAsString()) + "ResponseDto";
+    String returnType = method.getType().asString();
+    if ("void".equals(returnType)) return "Object";
+    if (isPrimitiveType(returnType)) return returnType;
+    if ("org.omg.CORBA.Any".equals(returnType))
+      return returnAsDto ? basePackage + ".dto.AnyValue" : "org.omg.CORBA.Any";
+    if (!returnAsDto) return resolveTypeFQN(returnType, method, servicePackage);
+    return mapToDtoType(basePackage, returnType);
+  }
+
   /** "Operations" サフィックスを取り除いたサービス名を返す */
   static String toServiceName(ClassOrInterfaceDeclaration serviceIface) {
     String name = serviceIface.getNameAsString();
