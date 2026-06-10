@@ -103,11 +103,13 @@ public class SpringBootProjectGenerator {
     ProjectScaffolder.writeServletClass(basePkgName, pkgBaseDir);
     StubHandler.copyIdlStubSources(stubSourceRoot, javaDir);
     AnyTypeWriter.writeAnyValueDto(dtoDir, basePkgName);
-    AnyTypeWriter.writeAnyMapper(mapperDir, basePkgName);
+    // 構造体一覧を先に収集して AnyMapper の tk_struct 生成にも渡す
+    List<ClassOrInterfaceDeclaration> structClasses =
+        StubHandler.collectStructClasses(stubSourceRoot);
+    AnyTypeWriter.writeAnyMapper(mapperDir, basePkgName, structClasses);
     StringMapperWriter.write(mapperDir, basePkgName);
 
-    for (ClassOrInterfaceDeclaration structClass :
-        StubHandler.collectStructClasses(stubSourceRoot)) {
+    for (ClassOrInterfaceDeclaration structClass : structClasses) {
       DtoGenerator.generate(structClass, javaDir, basePkgName);
       MapperGenerator.generate(structClass, javaDir, basePkgName);
     }

@@ -1,9 +1,12 @@
 package com.example.parser;
 
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /** CORBA Any ↔ AnyValue 相互変換に使う雛形クラスを出力するユーティリティ */
 final class AnyTypeWriter {
@@ -41,11 +44,61 @@ final class AnyTypeWriter {
   /**
    * CORBA.Any ⇔ AnyValue 相互変換 Mapper を出力する
    *
+   * <p>{@code TCKind.tk_struct} については既知の構造体型ごとに TypeCode ID でスイッチして {@code XxxHelper.extract()} +
+   * {@code XxxMapper.toDto()} を呼び出すコードを生成します。
+   *
    * @param mapperDir Mapper ディレクトリ
    * @param basePkgName ベースパッケージ名
+   * @param structClasses IDL スタブから収集した構造体クラス一覧
    */
-  static void writeAnyMapper(Path mapperDir, String basePkgName) throws IOException {
+  static void writeAnyMapper(
+      Path mapperDir, String basePkgName, List<ClassOrInterfaceDeclaration> structClasses)
+      throws IOException {
     String pkg = basePkgName + ".mapper";
+
+    // TypeCode ID → Helper.extract() + Mapper.toDto() のケースを生成
+    String structCases =
+        structClasses.stream()
+            .map(
+                clazz -> {
+                  String className = clazz.getNameAsString();
+                  String classPkg =
+                      clazz
+                          .findCompilationUnit()
+                          .flatMap(
+                              cu ->
+                                  cu.getPackageDeclaration()
+                                      .map(pd -> pd.getNameAsString()))
+                          .orElse("");
+                  // CORBA リポジトリID: "IDL:pkg/ClassName:1.0"
+                  String repoId =
+                      "IDL:"
+                          + (classPkg.isEmpty() ? "" : classPkg.replace('.', '/') + "/")
+                          + className
+                          + ":1.0";
+                  String helperFqn =
+                      classPkg.isEmpty()
+                          ? className + "Helper"
+                          : classPkg + "." + className + "Helper";
+                  String mapperFqn = basePkgName + ".mapper." + className + "Mapper";
+                  return "        case \"%s\": return new AnyValue(\"struct\", %s.toDto(%s.extract(any)));\n"
+                      .formatted(repoId, mapperFqn, helperFqn);
+                })
+            .collect(Collectors.joining());
+
+    // tk_struct ブランチ全体（構造体がなければ空文字列）
+    String structBlock =
+        structClasses.isEmpty()
+            ? ""
+            : "    else if (kind.equals(TCKind.tk_struct)) {\n"
+                + "      String id = any.type().id();\n"
+                + "      switch (id) {\n"
+                + structCases
+                + "        default: return new AnyValue(\"struct\", null);\n"
+                + "      }\n"
+                + "    }\n";
+
+    // テンプレート内の //@@STRUCT@@ マーカーを structBlock で置換する
     String content =
         """
         package %s;
@@ -94,16 +147,18 @@ final class AnyTypeWriter {
             else if (kind.equals(TCKind.tk_octet)) return new AnyValue("byte", any.extract_octet());
             else if (kind.equals(TCKind.tk_string)) return new AnyValue("string", any.extract_string());
             else if (kind.equals(TCKind.tk_any)) return new AnyValue("any", toAnyValue(any.extract_any()));
+            //@@STRUCT@@
             else return new AnyValue("object", any.extract_Object());
           }
         }
         """
-            .formatted(pkg, basePkgName);
+            .formatted(pkg, basePkgName)
+            .replace("    //@@STRUCT@@\n", structBlock);
+
     Files.writeString(
         mapperDir.resolve("AnyMapper.java"),
         content,
         StandardOpenOption.CREATE,
         StandardOpenOption.TRUNCATE_EXISTING);
   }
-
 }
