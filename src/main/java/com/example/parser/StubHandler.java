@@ -9,7 +9,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 
-/** IDL スタブのコピーと構造体クラス収集を担うユーティリティ */
+/** IDLスタブのコピーと構造体クラス収集を担うユーティリティ */
 final class StubHandler {
   private StubHandler() {}
 
@@ -36,7 +36,7 @@ final class StubHandler {
   }
 
   /**
-   * スタブから CORBA 構造体クラスの一覧を収集 インターフェース・Helper・Holder・POA・Stub・メソッドを持つクラスは除外
+   * スタブからCORBA構造体クラスの一覧を収集 インターフェース・Helper・Holder・POA・Stub・メソッドを持つクラスは除外
    *
    * @param stubSourceRoot スタブのルートディレクトリ
    * @return 構造体クラスの一覧
@@ -61,7 +61,12 @@ final class StubHandler {
     return structs;
   }
 
-  /** DTO/Mapper 生成対象の構造体クラスかどうかを判定 インターフェース・各種 idlj 生成クラス（Helper/Holder/POA 等）・メソッドを持つクラスは除外 */
+  /**
+   * DTO/Mapper生成対象の構造体クラスかどうかを判定 インターフェース・各種idlj生成クラス（Helper/Holder/POA等）・メソッドを持つクラスは除外
+   *
+   * @param clazz 判定対象のクラス宣言
+   * @return DTO/Mapper生成対象であればtrue
+   */
   private static boolean isTargetStruct(ClassOrInterfaceDeclaration clazz) {
     if (clazz.isInterface()) return false;
     String name = clazz.getNameAsString();

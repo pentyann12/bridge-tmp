@@ -8,12 +8,12 @@ import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/** Spring MVC コントローラークラスを生成するユーティリティ */
+/** Spring MVCコントローラークラスを生成するユーティリティ */
 final class ControllerWriter {
   private ControllerWriter() {}
 
   /**
-   * コントローラークラスを生成してファイルに書き出す メソッドごとに {@link ControllerMethodBuilder#build} を呼び出してコードを組み立てます
+   * コントローラークラスを生成してファイルに書き出す メソッドごとに{@link ControllerMethodBuilder#build}を呼び出してコードを組み立てます
    *
    * @param serviceName サービス名
    * @param servicePackage サービスが属するパッケージ

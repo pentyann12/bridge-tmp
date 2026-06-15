@@ -7,7 +7,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import javax.lang.model.element.Modifier;
 
-/** CORBA ⇔ DTO のMapper自動生成クラス */
+/** CORBA⇔DTOのMapper自動生成クラス */
 public class MapperGenerator {
 
   /**
@@ -69,7 +69,7 @@ public class MapperGenerator {
           fromDtoBody.addStatement(
               "dst.$N = $T.toAny(src.$N)", nameField, anyMapperClass, nameField);
         } else if (isPrimitive && !isArray) {
-          // String は CORBA から取得時に SJIS として再エンコードする（スカラーのみ）
+          // StringはCORBAから取得時にSJISとして再エンコードする（スカラーのみ）
           if ("String".equals(simple)) {
             toDtoBody.addStatement(
                 "dto.$N = $T.encode($N.$N)", nameField, stringMapperClass, "src", nameField);
@@ -79,62 +79,65 @@ public class MapperGenerator {
           fromDtoBody.addStatement("dst.$N = src.$N", nameField, nameField);
         } else if (isArray) {
           if ("String[]".equals(v.getType().asString())) {
-            // 1次元 String[] の各要素を StringMapper.encode() でエンコードする
-            // NOTE: String[][] 等の多次元配列は field.getElementType() も "String" を返すため
-            // v.getType() で次元数を判定する必要がある
+            // 1次元String[]の各要素をStringMapper.encode()でエンコードする
+            // NOTE: String[][]等の多次元配列はfield.getElementType()も "String" を返すため
+            // v.getType()で次元数を判定する必要がある
             toDtoBody.addStatement(
                 "dto.$N = src.$N == null ? null : java.util.Arrays.stream(src.$N).map($T::encode).toArray(String[]::new)",
-                nameField, nameField, nameField, stringMapperClass);
+                nameField,
+                nameField,
+                nameField,
+                stringMapperClass);
             fromDtoBody.addStatement("dst.$N = src.$N", nameField, nameField);
           } else if (isPrimitive) {
-            // int[] 等のプリミティブ配列、または多次元 String[][] はそのままコピー
+            // int[]等のプリミティブ配列、または多次元String[][]はそのままコピー
             toDtoBody.addStatement("dto.$N = src.$N", nameField, nameField);
             fromDtoBody.addStatement("dst.$N = src.$N", nameField, nameField);
           } else {
-          // 独自型の配列: 各要素を対応する Mapper で変換する
-          ClassName nestedMapperClass = ClassName.get(basePackage + ".mapper", simple + "Mapper");
-          ClassName dtoElemClass = ClassName.get(dtoPackage, simple + "Dto");
+            // 独自型の配列: 各要素を対応するMapperで変換する
+            ClassName nestedMapperClass = ClassName.get(basePackage + ".mapper", simple + "Mapper");
+            ClassName dtoElemClass = ClassName.get(dtoPackage, simple + "Dto");
 
-          // 要素型のパッケージを含む構造体のimport文から逆引きする。
-          // NOTE:
-          // グローバルスコープ由来で別パッケージに再配置された型の場合、
-          // corbaPackage (含む構造体のパッケージ) と異なるため import を参照する必要がある。
-          String elemPkg =
-              clazz
-                  .findCompilationUnit()
-                  .map(
-                      cu ->
-                          cu.getImports().stream()
-                              .filter(imp -> !imp.isAsterisk())
-                              .filter(imp -> imp.getNameAsString().endsWith("." + simple))
-                              .findFirst()
-                              .map(
-                                  imp -> {
-                                    String fqn = imp.getNameAsString();
-                                    return fqn.substring(0, fqn.lastIndexOf('.'));
-                                  })
-                              .orElse(null))
-                  .orElse(null);
-          ClassName corbaElemClass =
-              elemPkg != null
-                  ? ClassName.get(elemPkg, simple)
-                  : (corbaPackage.isEmpty()
-                      ? ClassName.bestGuess(simple)
-                      : ClassName.get(corbaPackage, simple));
-          toDtoBody.addStatement(
-              "dto.$N = src.$N == null ? null : java.util.Arrays.stream(src.$N).map($T::toDto).toArray($T[]::new)",
-              nameField,
-              nameField,
-              nameField,
-              nestedMapperClass,
-              dtoElemClass);
-          fromDtoBody.addStatement(
-              "dst.$N = src.$N == null ? null : java.util.Arrays.stream(src.$N).map($T::fromDto).toArray($T[]::new)",
-              nameField,
-              nameField,
-              nameField,
-              nestedMapperClass,
-              corbaElemClass);
+            // 要素型のパッケージを含む構造体のimport文から逆引きする。
+            // NOTE:
+            // グローバルスコープ由来で別パッケージに再配置された型の場合、
+            // corbaPackage (含む構造体のパッケージ)と異なるためimportを参照する必要がある。
+            String elemPkg =
+                clazz
+                    .findCompilationUnit()
+                    .map(
+                        cu ->
+                            cu.getImports().stream()
+                                .filter(imp -> !imp.isAsterisk())
+                                .filter(imp -> imp.getNameAsString().endsWith("." + simple))
+                                .findFirst()
+                                .map(
+                                    imp -> {
+                                      String fqn = imp.getNameAsString();
+                                      return fqn.substring(0, fqn.lastIndexOf('.'));
+                                    })
+                                .orElse(null))
+                    .orElse(null);
+            ClassName corbaElemClass =
+                elemPkg != null
+                    ? ClassName.get(elemPkg, simple)
+                    : (corbaPackage.isEmpty()
+                        ? ClassName.bestGuess(simple)
+                        : ClassName.get(corbaPackage, simple));
+            toDtoBody.addStatement(
+                "dto.$N = src.$N == null ? null : java.util.Arrays.stream(src.$N).map($T::toDto).toArray($T[]::new)",
+                nameField,
+                nameField,
+                nameField,
+                nestedMapperClass,
+                dtoElemClass);
+            fromDtoBody.addStatement(
+                "dst.$N = src.$N == null ? null : java.util.Arrays.stream(src.$N).map($T::fromDto).toArray($T[]::new)",
+                nameField,
+                nameField,
+                nameField,
+                nestedMapperClass,
+                corbaElemClass);
           }
         } else {
           ClassName nestedMapperClass = ClassName.get(basePackage + ".mapper", simple + "Mapper");

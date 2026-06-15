@@ -9,12 +9,12 @@ import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/** CORBA サービス呼び出しをラップする CorbaClient クラスを生成するユーティリティ */
+/** CORBAサービス呼び出しをラップするCorbaClientクラスを生成するユーティリティ */
 final class CorbaClientWriter {
   private CorbaClientWriter() {}
 
   /**
-   * CorbaClient クラスを生成してファイルに書き出す
+   * CorbaClientクラスを生成してファイルに書き出す
    *
    * @param serviceName サービス名（例: "ItemService"）
    * @param servicePackage サービスが属するパッケージ

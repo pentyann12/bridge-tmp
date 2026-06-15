@@ -10,7 +10,7 @@ final class ProjectScaffolder {
   private ProjectScaffolder() {}
 
   /**
-   * build.gradle を出力する
+   * build.gradleを出力する
    *
    * @param outputDir 出力先ディレクトリ
    */
@@ -52,7 +52,7 @@ final class ProjectScaffolder {
   }
 
   /**
-   * Spring Boot エントリポイントクラスを出力する
+   * Spring Bootエントリポイントクラスを出力する
    *
    * @param basePkgName 基礎パッケージ名
    * @param pkgBaseDir 出力先ディレクトリ
@@ -84,7 +84,7 @@ final class ProjectScaffolder {
   }
 
   /**
-   * ServletInitializer を出力する
+   * ServletInitializerを出力する
    *
    * @param basePkgName 基礎パッケージ名
    * @param pkgBaseDir 出力先ディレクトリ

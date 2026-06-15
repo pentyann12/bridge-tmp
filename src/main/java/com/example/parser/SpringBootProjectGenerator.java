@@ -11,60 +11,70 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * CORBA サービスを REST エンドポイントとして公開する Spring Boot プロジェクト（Gradle）を生成するユーティリティ
+ * CORBAサービスをRESTエンドポイントとして公開するSpring Bootプロジェクト（Gradle）を生成するユーティリティ
  *
  * <p>主な生成フロー:
  *
  * <ol>
- *   <li>{@link #setupProject} でディレクトリ・共通ファイル・スタブコピー・構造体 DTO/Mapper を出力
- *   <li>{@link #generateService} でサービスごとの RequestDto/ResponseDto・CorbaClient・Controller を出力
- *   <li>{@link ServiceDtoWriter#writeApplicationProperties} で IOR 設定ファイルを出力
+ *   1. {@link #setupProject}でディレクトリ・共通ファイル・スタブコピー・構造体DTO/Mapperを出力 2. {@link
+ *   #generateService}でサービスごとのRequestDto/ResponseDto・CorbaClient・Controllerを出力 3. {@link
+ *   ServiceDtoWriter#writeApplicationProperties}でIOR設定ファイルを出力
  * </ol>
  */
 public class SpringBootProjectGenerator {
 
   /**
-   * 単一の CORBA サービスインターフェースから Spring Boot プロジェクトを生成
+   * 単一のCORBAサービスインターフェースからSpring Bootプロジェクトを生成
    *
-   * @param serviceIface CORBA サービスインターフェースのクラス宣言
-   * @param stubSourceRoot idlj によって生成されたスタブソースのルートディレクトリ
-   * @param outputDir 生成する Spring Boot プロジェクトの出力ディレクトリ
+   * @param serviceIface CORBAサービスインターフェースのクラス宣言
+   * @param stubSourceRoot idljによって生成されたスタブソースのルートディレクトリ
+   * @param outputDir 生成するSpring Bootプロジェクトの出力ディレクトリ
    * @param basePkgName 生成プロジェクトのベースパッケージ名
-   * @param returnAsDto 複雑な戻り値型を DTO に変換するかどうか
+   * @param returnAsDto 複雑な戻り値型をDTOに変換するかどうか
+   * @param idlPackagePrefix `idlj -pkgPrefix`に渡したパッケージプレフィックス
+   * @param repoIdPrefix IDLの`#pragma prefix`で設定されたリポジトリIDプレフィックス
    */
   public static void generate(
       ClassOrInterfaceDeclaration serviceIface,
       Path stubSourceRoot,
       Path outputDir,
       String basePkgName,
-      boolean returnAsDto)
+      boolean returnAsDto,
+      String idlPackagePrefix,
+      String repoIdPrefix)
       throws IOException {
 
-    ProjectLayout layout = setupProject(stubSourceRoot, outputDir, basePkgName);
+    ProjectLayout layout =
+        setupProject(stubSourceRoot, outputDir, basePkgName, idlPackagePrefix, repoIdPrefix);
     String serviceName = CorbaTypeUtils.toServiceName(serviceIface);
     generateService(serviceIface, serviceName, layout, basePkgName, returnAsDto, "CorbaClient");
     ServiceDtoWriter.writeApplicationProperties(outputDir, List.of(serviceName));
   }
 
   /**
-   * 複数の CORBA サービスインターフェースをまとめて単一の Spring Boot プロジェクトに生成 サービスごとに専用の CorbaClient（例: {@code
-   * ItemServiceCorbaClient}）と Controller が生成されます
+   * 複数のCORBAサービスインターフェースをまとめて単一のSpring Bootプロジェクトに生成 サービスごとに専用のCorbaClient（例: {@code
+   * ItemServiceCorbaClient}）とControllerが生成されます
    *
    * @param services CORBA サービスインターフェースのクラス宣言一覧
    * @param stubSourceRoot idlj によって生成されたスタブソースのルートディレクトリ
    * @param outputDir 生成する Spring Boot プロジェクトの出力ディレクトリ
    * @param basePkgName 生成プロジェクトのベースパッケージ名
    * @param returnAsDto 複雑な戻り値型を DTO に変換するかどうか
+   * @param idlPackagePrefix idlj {@code -pkgPrefix} に渡したパッケージプレフィックス
+   * @param repoIdPrefix IDL {@code #pragma prefix} で設定されたリポジトリIDプレフィックス
    */
   public static void generateAll(
       List<ClassOrInterfaceDeclaration> services,
       Path stubSourceRoot,
       Path outputDir,
       String basePkgName,
-      boolean returnAsDto)
+      boolean returnAsDto,
+      String idlPackagePrefix,
+      String repoIdPrefix)
       throws IOException {
 
-    ProjectLayout layout = setupProject(stubSourceRoot, outputDir, basePkgName);
+    ProjectLayout layout =
+        setupProject(stubSourceRoot, outputDir, basePkgName, idlPackagePrefix, repoIdPrefix);
     List<String> serviceNames = new ArrayList<>();
     for (ClassOrInterfaceDeclaration serviceIface : services) {
       String serviceName = CorbaTypeUtils.toServiceName(serviceIface);
@@ -76,14 +86,21 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * プロジェクトの共通部分（ディレクトリ・ビルドファイル・共有クラス・スタブ・構造体 DTO/Mapper）を生成し、出力先のレイアウト情報を返す
+   * プロジェクトの共通部分（ディレクトリ・ビルドファイル・共有クラス・スタブ・構造体DTO/Mapper）を生成し、出力先のレイアウト情報を返す
    *
    * @param stubSourceRoot スタブのルートディレクトリ
    * @param outputDir Spring Boot プロジェクトの出力先
    * @param basePkgName ベースパッケージ名
+   * @param idlPackagePrefix idlj {@code -pkgPrefix} に渡したパッケージプレフィックス
+   * @param repoIdPrefix IDL {@code #pragma prefix} で設定されたリポジトリIDプレフィックス
    * @return 生成先ディレクトリ群を保持するレイアウト情報
    */
-  private static ProjectLayout setupProject(Path stubSourceRoot, Path outputDir, String basePkgName)
+  private static ProjectLayout setupProject(
+      Path stubSourceRoot,
+      Path outputDir,
+      String basePkgName,
+      String idlPackagePrefix,
+      String repoIdPrefix)
       throws IOException {
     Path javaDir = outputDir.resolve("src/main/java");
     Path pkgBaseDir = javaDir.resolve(basePkgName.replace('.', '/'));
@@ -103,10 +120,11 @@ public class SpringBootProjectGenerator {
     ProjectScaffolder.writeServletClass(basePkgName, pkgBaseDir);
     StubHandler.copyIdlStubSources(stubSourceRoot, javaDir);
     AnyTypeWriter.writeAnyValueDto(dtoDir, basePkgName);
-    // 構造体一覧を先に収集して AnyMapper の tk_struct 生成にも渡す
+    // 構造体一覧を先に収集してAnyMapperのtk_struct生成にも渡す
     List<ClassOrInterfaceDeclaration> structClasses =
         StubHandler.collectStructClasses(stubSourceRoot);
-    AnyTypeWriter.writeAnyMapper(mapperDir, basePkgName, structClasses);
+    AnyTypeWriter.writeAnyMapper(
+        mapperDir, basePkgName, structClasses, idlPackagePrefix, repoIdPrefix);
     StringMapperWriter.write(mapperDir, basePkgName);
 
     for (ClassOrInterfaceDeclaration structClass : structClasses) {
@@ -148,19 +166,6 @@ public class SpringBootProjectGenerator {
     if (methods.isEmpty()) return;
     for (MethodDeclaration method : methods) {
       ServiceDtoWriter.generateRequestDto(method, layout.javaDir, basePkgName);
-      boolean hasOutParams =
-          method.getParameters().stream()
-              .anyMatch(p -> CorbaTypeUtils.isHolderType(p.getType().asString()));
-      if (hasOutParams) {
-        ServiceDtoWriter.generateResponseDto(
-            method,
-            layout.javaDir,
-            basePkgName,
-            returnAsDto,
-            servicePackage,
-            layout.stubSourceRoot);
-      }
-      // XxxRpcResult / XxxRpcResponse を全メソッドで生成（ResponseDto がある場合はその後に生成）
       ServiceDtoWriter.generateRpcResponse(
           method, layout.javaDir, basePkgName, returnAsDto, servicePackage, layout.stubSourceRoot);
     }

@@ -62,6 +62,16 @@ public class Main {
     }
     boolean returnAsDto = "dto".equalsIgnoreCase(returnMode) || returnMode.isBlank();
 
+    // IDLファイルから #pragma prefixを自動検出
+    String repoIdPrefix = "";
+    for (Path idlFile : idlFiles) {
+      String prefix = collectRepoIdPrefix(idlFile);
+      if (!prefix.isEmpty()) {
+        repoIdPrefix = prefix;
+        break;
+      }
+    }
+
     // idljを用いて、全てのidlファイルからJavaスタブを生成する
     Files.createDirectories(stubRoot);
     for (Path idlFile : idlFiles) {
@@ -88,7 +98,7 @@ public class Main {
       try {
         Path output = outputRoot.resolve(singleProjectName);
         SpringBootProjectGenerator.generateAll(
-            services, stubRoot, output, basePackage, returnAsDto);
+            services, stubRoot, output, basePackage, returnAsDto, idlPackagePrefix, repoIdPrefix);
         System.out.println("Spring project generated at: " + output);
       } catch (Exception e) {
         e.printStackTrace();
@@ -104,7 +114,8 @@ public class Main {
                   ? serviceName.substring(0, serviceName.length() - "Operations".length())
                   : serviceName;
           Path output = outputRoot.resolve(shortName + "Api");
-          SpringBootProjectGenerator.generate(service, stubRoot, output, basePackage, returnAsDto);
+          SpringBootProjectGenerator.generate(
+              service, stubRoot, output, basePackage, returnAsDto, idlPackagePrefix, repoIdPrefix);
           System.out.println("Spring project generated at: " + output);
         } catch (Exception e) {
           e.printStackTrace();
@@ -123,11 +134,11 @@ public class Main {
         Usage: [options] <idl-file>...
 
         Options:
-          --stub-root=<path>          IDL生成Javaソースの出力先ディレクトリ (default: generated-stubs)
-          --output-root=<path>        Springプロジェクト出力先ディレクトリ (default: generated-spring)
-          --base-package=<package>    生成されるSpringプロジェクトのベースパッケージ (default: com.generated)
+          --stub-root=<path>          IDL生成Javaソースの出力先ディレクトリ(default: generated-stubs)
+          --output-root=<path>        Springプロジェクト出力先ディレクトリ(default: generated-spring)
+          --base-package=<package>    生成されるSpringプロジェクトのベースパッケージ(default: com.generated)
           --idl-package-prefix=<pkg>  IDLモジュール名に対してidljのパッケージプレフィックスを適用
-          --help, -h                  このヘルプを表示
+          --help                      このヘルプを表示
 
         """);
   }
@@ -198,7 +209,7 @@ public class Main {
   }
 
   /**
-   * argfile に書き込む引数をエスケープする
+   * argfileに書き込む引数をエスケープする
    *
    * @param s エスケープ対象文字列
    * @return エスケープ済み文字列
@@ -219,6 +230,24 @@ public class Main {
   private static String removeExtension(String name) {
     int idx = name.lastIndexOf('.');
     return idx >= 0 ? name.substring(0, idx) : name;
+  }
+
+  /**
+   * 指定したIDLファイルとそのincludeファイルを解析し、{@code #pragma prefix}で設定された
+   * リポジトリIDプレフィックスを返す。複数あれば最初に見つかったものを返す。
+   *
+   * @param idlFile ルートのIDLファイル
+   * @return {@code #pragma prefix} の値。見つからなければ空文字列
+   */
+  private static String collectRepoIdPrefix(Path idlFile) throws IOException {
+    Set<Path> includedFiles = new LinkedHashSet<>();
+    collectIncludedFiles(idlFile, includedFiles);
+    Pattern prefixPattern = Pattern.compile("#pragma\\s+prefix\\s+\"([^\"]+)\"");
+    for (Path file : includedFiles) {
+      Matcher m = prefixPattern.matcher(Files.readString(file));
+      if (m.find()) return m.group(1);
+    }
+    return "";
   }
 
   /**
@@ -297,9 +326,9 @@ public class Main {
   }
 
   /**
-   * idlj がデフォルトパッケージ（stubRoot 直下）に出力した .java ファイルを 適切なパッケージへ移動し、それを参照している import 文を更新する
+   * idljがデフォルトパッケージ（stubRoot直下）に出力した .javaファイルを 適切なパッケージへ移動し、それを参照しているimport文を更新する
    *
-   * <p>IDL の仕様上、グローバルスコープで定義された typedef sequence は モジュール外のデフォルトパッケージに出力されるため、名前付きパッケージから import
+   * <p>IDLの仕様上、グローバルスコープで定義されたtypedef sequenceは モジュール外のデフォルトパッケージに出力されるため、名前付きパッケージからimport
    * できないこのメソッドはその問題を後処理として修正する
    *
    * @param stubRoot idlj の出力先ルートディレクトリ
@@ -434,7 +463,7 @@ public class Main {
   /**
    * グローバルスコープスタブの移動先パッケージを決定する 優先順位は
    *
-   * <p>1. idlPackagePrefixが空でなければそれ 2. 既存スタブのpackage宣言から共通プレフィックスを求めて使用 3. 上記が得られなければgenerated
+   * <p>1. idlPackagePrefixが空でなければそれ2. 既存スタブのpackage宣言から共通プレフィックスを求めて使用3. 上記が得られなければgenerated
    *
    * @param stubRoot スタブのディレクトリ
    * @param idlPackagePrefix コマンド引数の-pkgPrefix

@@ -8,7 +8,7 @@ final class ProjectLayout {
   final Path controllerDir;
   final Path corbaDir;
 
-  /** Holder の value 型解決でスタブファイルを参照するために保持する */
+  /** Holderのvalue型解決でスタブファイルを参照するために保持する */
   final Path stubSourceRoot;
 
   ProjectLayout(Path javaDir, Path controllerDir, Path corbaDir, Path stubSourceRoot) {

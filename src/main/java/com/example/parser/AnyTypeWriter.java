@@ -10,15 +10,16 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-/** CORBA Any ↔ AnyValue 相互変換に使う雛形クラスを出力するユーティリティ */
+/** CORBA.Any <-> AnyValueの相互変換コード生成ユーティリティ */
 final class AnyTypeWriter {
+  // 1つのinitStructHandlersN()に詰める最大エントリ数
+  private static final int STRUCT_CHUNK = 50;
+  
+  /** constructor. */
   private AnyTypeWriter() {}
 
-  // 1つの initStructHandlersN() に詰める最大エントリ数（65535バイト制限対策）
-  private static final int STRUCT_CHUNK = 50;
-
   /**
-   * AnyValue クラスを出力する
+   * AnyValueクラスを出力する
    *
    * @param dtoDir 出力先ディレクトリ
    * @param basePkgName ベースパッケージ名
@@ -47,25 +48,48 @@ final class AnyTypeWriter {
   }
 
   /**
-   * CORBA.Any ⇔ AnyValue 相互変換 Mapper を出力する
+   * Javaパッケージ名から`idlj -pkgPrefix`で付与されたプレフィックスを除き、本来のIDL名前空間を返す
    *
-   * <p>プリミティブ型の分岐は {@code KIND_HANDLERS}（{@code Map<Integer, Function<Any,AnyValue>>}）で処理し、
-   * {@code toAnyValue} 自体のバイト数を最小化します。
+   * @param classPkg Javaパッケージ名（例: "com.prefix.corba.Foo"）
+   * @param idlPackagePrefix `idlj -pkgPrefix`で付与されたパッケージプレフィックス（例: "com.prefix"）
+   * @return プレフィックスを除いたIDL名前空間（例: "corba"）。プレフィックスが空またはマッチしない場合はclassPkgをそのまま返す
+   */
+  private static String toIdlPkg(String classPkg, String idlPackagePrefix) {
+    if (idlPackagePrefix.isEmpty()) return classPkg;
+    if (classPkg.equals(idlPackagePrefix)) return "";
+    if (classPkg.startsWith(idlPackagePrefix + ".")){
+      return classPkg.substring(idlPackagePrefix.length() + 1);
+    }
+    return classPkg;
+  }
+
+  /**
+   * TODO: 整理
+   * CORBA.Any⇔AnyValue相互変換Mapperを出力する
    *
-   * <p>{@code tk_struct} については {@code STRUCT_HANDLERS}（{@code Map<String, Function<Any,AnyValue>>}）で
-   * TypeCode ID から直接 Mapper を引きます。エントリ数が多くても static initializer の 65535 バイト制限に
-   * 引っかからないよう、{@code initStructHandlersN()} メソッドへチャンク分割して登録します。
+   * <p>プリミティブ型の分岐は{@code KIND_HANDLERS}（{@code Map<Integer, Function<Any,AnyValue>>}）で処理し、 {@code
+   * toAnyValue}自体のバイト数を最小化します。
    *
-   * @param mapperDir Mapper ディレクトリ
+   * <p>{@code tk_struct}については{@code STRUCT_HANDLERS}（{@code Map<String, Function<Any,AnyValue>>}）で
+   * TypeCode IDから直接Mapperを引きます。エントリ数が多くてもstatic initializerの65535バイト制限に 引っかからないよう、{@code
+   * initStructHandlersN()}メソッドへチャンク分割して登録します。
+   *
+   * @param mapperDir Mapperディレクトリ
    * @param basePkgName ベースパッケージ名
-   * @param structClasses IDL スタブから収集した構造体クラス一覧
+   * @param structClasses IDLスタブから収集した構造体クラス一覧
+   * @param idlPackagePrefix `idlj -pkgPrefix`で付与されたパッケージプレフィックス（TypeCode IDから除去するために使用）
+   * @param repoIdPrefix IDLの`#pragma prefix`で設定されたリポジトリIDプレフィックス（TypeCode IDの先頭に付与）
    */
   static void writeAnyMapper(
-      Path mapperDir, String basePkgName, List<ClassOrInterfaceDeclaration> structClasses)
+      Path mapperDir,
+      String basePkgName,
+      List<ClassOrInterfaceDeclaration> structClasses,
+      String idlPackagePrefix,
+      String repoIdPrefix)
       throws IOException {
     String pkg = basePkgName + ".mapper";
 
-    // 構造体ごとの Map.put エントリ文字列を生成
+    // 構造体ごとのMap.putエントリ文字列を生成
     List<String> entries =
         structClasses.stream()
             .map(
@@ -76,27 +100,31 @@ final class AnyTypeWriter {
                           .findCompilationUnit()
                           .flatMap(cu -> cu.getPackageDeclaration().map(pd -> pd.getNameAsString()))
                           .orElse("");
-                  String repoId =
-                      "IDL:"
-                          + (classPkg.isEmpty() ? "" : classPkg.replace('.', '/') + "/")
-                          + className
-                          + ":1.0";
+                  // idlj -pkgPrefixで付与されたJavaパッケージプレフィックスを除いたIDL名前空間
+                  String idlPkg = toIdlPkg(classPkg, idlPackagePrefix);
+                  // #pragma prefixとIDL名前空間を組み合わせてTypeCode IDを構築
+                  String repoPath =
+                      (repoIdPrefix.isEmpty() ? "" : repoIdPrefix + "/")
+                          + (idlPkg.isEmpty() ? "" : idlPkg.replace('.', '/') + "/")
+                          + className;
+                  String repoId = "IDL:" + repoPath + ":1.0";
+                  // AnyValue.type: IDL名前空間付き型名（例: "corba.MyStruct"）
+                  String typeName = idlPkg.isEmpty() ? className : idlPkg + "." + className;
                   String helperFqn =
                       classPkg.isEmpty()
                           ? className + "Helper"
                           : classPkg + "." + className + "Helper";
                   String mapperFqn = basePkgName + ".mapper." + className + "Mapper";
                   return "    m.put(\"%s\", any -> new AnyValue(\"%s\", %s.toDto(%s.extract(any))));\n"
-                      .formatted(repoId, className, mapperFqn, helperFqn);
+                      .formatted(repoId, typeName, mapperFqn, helperFqn);
                 })
             .collect(Collectors.toList());
 
-    // STRUCT_CHUNK 件ずつ initStructHandlersN() メソッドに分割
+    // STRUCT_CHUNK件ずつinitStructHandlersN()メソッドに分割
     List<String> chunkMethods = new ArrayList<>();
     for (int i = 0; i < entries.size(); i += STRUCT_CHUNK) {
       int idx = i / STRUCT_CHUNK;
-      String body =
-          String.join("", entries.subList(i, Math.min(i + STRUCT_CHUNK, entries.size())));
+      String body = String.join("", entries.subList(i, Math.min(i + STRUCT_CHUNK, entries.size())));
       chunkMethods.add(
           "  private static void initStructHandlers"
               + idx
@@ -105,7 +133,7 @@ final class AnyTypeWriter {
               + "  }\n");
     }
 
-    // STRUCT_HANDLERS フィールド宣言 + static init + initStructHandlersN メソッド群
+    // STRUCT_HANDLERSフィールド宣言 + static init + initStructHandlersNメソッド群
     String structHandlersBlock;
     if (entries.isEmpty()) {
       structHandlersBlock =

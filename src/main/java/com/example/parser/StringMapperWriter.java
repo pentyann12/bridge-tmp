@@ -5,14 +5,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
-/** CORBA String の文字コード変換 Mapper を出力するユーティリティ */
+/** CORBA Stringの文字コード変換Mapperを出力するユーティリティ */
 final class StringMapperWriter {
   private StringMapperWriter() {}
 
   /**
-   * StringMapper クラスを出力する
+   * StringMapperクラスを出力する
    *
-   * <p>CORBA サーバーが ISO-8859-1 として送ってくる SJIS バイト列を正しい文字列に変換します。
+   * <p>CORBAサーバーがISO-8859-1として送ってくるSJISバイト列を正しい文字列に変換します。
    *
    * @param mapperDir Mapper ディレクトリ
    * @param basePkgName ベースパッケージ名

@@ -10,9 +10,9 @@ import javax.lang.model.element.Modifier;
 /**
  * DTO生成クラス
  *
- * <p>JavaParserで解析したIDL由来のクラス情報をもとに、 JavaPoetを使用してDTOクラスを生成する
+ * <p>JavaParserで解析したIDL由来のクラス情報をもとに、JavaPoetを使用してDTOクラスを生成する
  *
- * <p>- クラス名からDTOクラス名への変換 - フィールド型を変換（CORBA.Any → Object） - Javaソースコード生成とファイル出力
+ * <p>- クラス名からDTOクラス名への変換 - フィールド型を変換（CORBA.Any→Object） - Javaソースコード生成とファイル出力
  */
 public class DtoGenerator {
   /**
@@ -20,6 +20,7 @@ public class DtoGenerator {
    *
    * @param clazz スタブクラス定義
    * @param outputDir 出力先ディレクトリ
+   * @param basePackage 生成クラスのベースパッケージ名
    */
   public static void generate(ClassOrInterfaceDeclaration clazz, Path outputDir, String basePackage)
       throws IOException {
@@ -108,7 +109,8 @@ public class DtoGenerator {
   /**
    * 型名文字列をJavaPoetのTypeNameへ変換する
    *
-   * @param type 変換後の型名
+   * @param type 変換後の型名（プリミティブ、String、独自DTO型など）
+   * @param dtoPackage DTOパッケージ名（独自型のClassName生成に使用）
    * @return TypeName
    */
   private static TypeName toTypeName(String type, String dtoPackage) {

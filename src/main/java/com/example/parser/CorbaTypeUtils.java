@@ -10,21 +10,20 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/** CORBA ↔ DTO の型変換・名前解決に関するユーティリティ */
+/** CORBA↔DTOの型変換・名前解決に関するユーティリティ */
 final class CorbaTypeUtils {
   private CorbaTypeUtils() {}
 
   /**
-   * JSON-RPC レスポンスの {@code result.return} フィールドの型名を返す
+   * JSON-RPCレスポンスの`result.return`フィールドの型名を返す
    *
-   * <p>out引数ありなら {@code XxxResponseDto}、void なら {@code Object}、それ以外は戻り値型に応じた DTO / プリミティブ型を返します。
+   * voidなら`Object`、それ以外は戻り値型に応じたDTO/プリミティブ型を返します。
    *
    * @param method サービスインターフェースのメソッド宣言
    * @param basePackage ベースパッケージ名
-   * @param dtoPackage DTO パッケージ名
-   * @param servicePackage サービスが属するパッケージ（FQN 解決のフォールバック用）
-   * @param returnAsDto 複雑な型を DTO に変換するかどうか
-   * @param hasOutParams out引数を持つかどうか
+   * @param dtoPackage DTOパッケージ名
+   * @param servicePackage サービスが属するパッケージ（FQN解決のフォールバック用）
+   * @param returnAsDto 複雑な型をDTOに変換するかどうか
    * @return 型名文字列
    */
   static String resolveRpcReturnType(
@@ -32,10 +31,7 @@ final class CorbaTypeUtils {
       String basePackage,
       String dtoPackage,
       String servicePackage,
-      boolean returnAsDto,
-      boolean hasOutParams) {
-    if (hasOutParams)
-      return dtoPackage + "." + capitalize(method.getNameAsString()) + "ResponseDto";
+      boolean returnAsDto) {
     String returnType = method.getType().asString();
     if ("void".equals(returnType)) return "Object";
     if (isPrimitiveType(returnType)) return returnType;
@@ -45,7 +41,12 @@ final class CorbaTypeUtils {
     return mapToDtoType(basePackage, returnType);
   }
 
-  /** "Operations" サフィックスを取り除いたサービス名を返す */
+  /**
+   * "Operations" サフィックスを取り除いたサービス名を返す
+   *
+   * @param serviceIface サービスインターフェースのクラス宣言
+   * @return "Operations" サフィックスを除いたサービス名
+   */
   static String toServiceName(ClassOrInterfaceDeclaration serviceIface) {
     String name = serviceIface.getNameAsString();
     return name.endsWith("Operations")
@@ -53,19 +54,32 @@ final class CorbaTypeUtils {
         : name;
   }
 
-  /** 完全修飾型名から単純名を取り出す（例: "com.pkg.Foo" → "Foo"、"Foo" → "Foo"） */
+  /**
+   * 完全修飾型名から単純名を取り出す（例: "com.pkg.Foo" → "Foo"、"Foo" → "Foo"）
+   *
+   * @param type 完全修飾型名または単純名
+   * @return 単純名
+   */
   static String simpleName(String type) {
     return type.contains(".") ? type.substring(type.lastIndexOf('.') + 1) : type;
   }
 
-  /** 文字列の先頭を大文字にする */
+  /**
+   * 文字列の先頭を大文字にする
+   *
+   * @param s 入力文字列
+   * @return 先頭を大文字にした文字列。nullまたは空文字列の場合はそのまま返す
+   */
   static String capitalize(String s) {
     return (s == null || s.isEmpty()) ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
   }
 
   /**
-   * プリミティブ型または String かどうかを判定（配列は要素型で再帰判定） String を含むのは、IDL の string 型が Java の String にマップされ、 DTO
+   * プリミティブ型またはStringかどうかを判定（配列は要素型で再帰判定）Stringを含むのは、IDLのstring型がJavaのStringにマップされ、DTO
    * 変換不要のプリミティブ相当として扱うためです
+   *
+   * @param type 判定する型名
+   * @return プリミティブ型またはStringであればtrue
    */
   static boolean isPrimitiveType(String type) {
     if (type == null) return false;
@@ -86,16 +100,21 @@ final class CorbaTypeUtils {
     }
   }
 
-  /** Holder 型（CORBA out/inout パラメーター）かどうかを判定 単純名が "Holder" で終わるクラスを Holder 型とみなす */
+  /**
+   * Holder型（CORBA out/inoutパラメーター）かどうかを判定 単純名が "Holder" で終わるクラスをHolder型とみなす
+   *
+   * @param typeName 型名（単純名またはFQN）
+   * @return Holder型であればtrue
+   */
   static boolean isHolderType(String typeName) {
     return simpleName(typeName).endsWith("Holder");
   }
 
   /**
-   * メソッド定義の import 文を参照して単純型名を完全修飾名に解決
+   * メソッド定義のimport文を参照して単純型名を完全修飾名に解決
    *
-   * <p>JavaParser はシンボル解決なしでパースするため、IDLから生成されたスタブの import 文をスキャンして正しいパッケージを特定 グローバルスコープの型が
-   * idlPackagePrefix 直下へ再配置された場合でも正しく解決できます
+   * <p>JavaParserはシンボル解決なしでパースするため、IDLから生成されたスタブのimport文をスキャンして正しいパッケージを特定 グローバルスコープの型が
+   * idlPackagePrefix直下へ再配置された場合でも正しく解決できます
    *
    * @param type 解決したい型名（単純名または配列型、例: "GlobalTag[]"）
    * @param method 型が参照されているメソッド宣言（import 文のスキャンに使用）
@@ -124,11 +143,11 @@ final class CorbaTypeUtils {
   }
 
   /**
-   * Holder 型（CORBA out/inout パラメーター）の {@code value} フィールドの型名を返す
+   * Holder型（CORBA out/inoutパラメーター）の{@code value}フィールドの型名を返す
    *
-   * <p>CORBA プリミティブ Holder（{@code org.omg.CORBA.IntHolder} 等）はハードコードで対応し、 独自 Holder はスタブファイルを解析して
-   * {@code value} フィールドの型を取得 idlj は sequence typedef に対して配列型の {@code value} フィールドを生成するため （例: {@code
-   * GlobalTag value[]}）、ファイル解析が必要です
+   * <p>CORBAプリミティブHolder（{@code org.omg.CORBA.IntHolder}等）はハードコードで対応し、 独自Holderはスタブファイルを解析して {@code
+   * value}フィールドの型を取得idljはsequence typedefに対して配列型の{@code value}フィールドを生成するため （例: {@code GlobalTag
+   * value[]}）、ファイル解析が必要です
    *
    * @param holderType Holder 型の名前（単純名または FQN）
    * @param method 型が参照されているメソッド宣言
@@ -185,20 +204,23 @@ final class CorbaTypeUtils {
     return stripHolder(fqn);
   }
 
-  /** "FooHolder" → "Foo" のように Holder サフィックスを除去する */
+  /**
+   * "FooHolder" → "Foo" のようにHolderサフィックスを除去する
+   *
+   * @param fqn Holderサフィックスを持つ型名（単純名またはFQN）
+   * @return Holderサフィックスを除去した型名
+   */
   static String stripHolder(String fqn) {
     return fqn.endsWith("Holder") ? fqn.substring(0, fqn.length() - "Holder".length()) : fqn;
   }
 
   /**
-   * CORBA 型名をジェネレーター内部の DTO 型名へマップ
+   * CORBA型名をジェネレーター内部のDTO型名へマップ
    *
    * <ul>
-   *   <li>配列型: 要素型を再帰変換して {@code []} を付け直す（例: {@code com.pkg.Foo[] → dto.FooDto[]}）
-   *   <li>{@code org.omg.CORBA.Any}: {@code AnyValue} へマップ
-   *   <li>FQN を持つ型: 単純名 + {@code "Dto"}
-   *   <li>プリミティブ/String: そのまま返す
-   *   <li>単純名の独自型: パッケージプレフィックスを追加して {@code "Dto"} を付ける
+   *   - 配列型: 要素型を再帰変換して{@code []}を付け直す（例: {@code com.pkg.Foo[]→dto.FooDto[]}） - {@code
+   *   org.omg.CORBA.Any}: {@code AnyValue}へマップ - FQNを持つ型: 単純名 + {@code "Dto"} - プリミティブ/String:
+   *   そのまま返す - 単純名の独自型: パッケージプレフィックスを追加して{@code "Dto"}を付ける
    * </ul>
    *
    * @param basePackage ベースパッケージ名
@@ -218,12 +240,12 @@ final class CorbaTypeUtils {
   }
 
   /**
-   * CORBA 値を DTO へ変換する式（代入 RHS として使える文字列）を返す
+   * CORBA値をDTOへ変換する式（代入RHSとして使える文字列）を返す
    *
-   * <p>String は {@code returnAsDto} フラグに関係なく常に {@code StringMapper.encode()} でエンコードします
-   * （CORBA の文字列は ISO-8859-1 として渡される SJIS バイト列のため）。 それ以外のプリミティブ/Any は {@code returnAsDto=false}
-   * のときそのまま返します。 配列型は {@code Arrays.stream().map(Mapper::toDto).toArray()} 形式、 独自型は {@code
-   * XxxMapper.toDto(rhs)} 形式になります
+   * <p>Stringは{@code returnAsDto}フラグに関係なく常に{@code StringMapper.encode()}でエンコードします
+   * （CORBAの文字列はISO-8859-1として渡されるSJISバイト列のため）。 それ以外のプリミティブ/Anyは{@code returnAsDto=false}
+   * のときそのまま返します。 配列型は{@code Arrays.stream().map(Mapper::toDto).toArray()}形式、 独自型は{@code
+   * XxxMapper.toDto(rhs)}形式になります
    *
    * @param rhs 変換元の式（例: "result", "arg0.value"）
    * @param valueType CORBA 側の型名（配列型 "Foo[]" でも可）
@@ -234,7 +256,7 @@ final class CorbaTypeUtils {
    */
   static String corbaToDtoExpr(
       String rhs, String valueType, String basePackage, String dtoPackage, boolean returnAsDto) {
-    // String は CORBA の文字コード（ISO-8859-1 として渡される SJIS バイト）を SJIS として再解釈する
+    // StringはCORBAの文字コード（ISO-8859-1として渡されるSJISバイト）をSJISとして再解釈する
     if ("String".equals(valueType)) {
       return basePackage + ".mapper.StringMapper.encode(" + rhs + ")";
     }
@@ -264,7 +286,7 @@ final class CorbaTypeUtils {
   }
 
   /**
-   * 型名文字列を TypeName へ変換する
+   * 型名文字列をTypeNameへ変換する
    *
    * @param type 変換元の型名
    * @param dtoPkgName DTO パッケージ名
