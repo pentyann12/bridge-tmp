@@ -12,7 +12,7 @@ final class ControllerWriter {
   private ControllerWriter() {}
 
   /**
-   * コントローラークラスを生成してファイルに書き出す メソッドごとに{@link ControllerMethodBuilder#build}を呼び出してコードを組み立てます
+   * コントローラークラスを生成してファイルに書き出す メソッドごとに`ControllerMethodBuilder#build`を呼び出してコードを組み立てます
    *
    * @param serviceName サービス名
    * @param methods サービスインターフェースのメソッド一覧

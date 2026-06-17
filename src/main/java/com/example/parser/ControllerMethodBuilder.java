@@ -8,15 +8,12 @@ import java.util.List;
 /**
  * コントローラーメソッド1つ分のコード文字列を構築するユーティリティ
  *
- * <p>out引数（Holder型）の有無で挙動が変わります:
+ * out引数（Holder型）の有無で挙動が変わります:
  *
- * <ul>
- *   - out引数なし: 戻り値を直接返す通常のPOSTメソッドを生成 - out引数あり: 空のHolderを生成してCORBAを呼び出し、
+ * - out引数なし: 戻り値を直接返す通常のPOSTメソッドを生成 - out引数あり: 空のHolderを生成してCORBAを呼び出し、
  *   戻り値とout引数をまとめたResponseDtoを返すメソッドを生成
- * </ul>
  *
- * リクエストは{@code XxxRpcRequest}（{@code params}フィールドに{@code XxxRequestDto}）で受け取り、 レスポンスは{@code
- * XxxRpcResponse}（{@code result.return}に実際の値）で返します。
+ * リクエストは`XxxRpcRequest`（`params`フィールドに`XxxRequestDto`）で受け取り、 レスポンスは`XxxRpcResponse`（`result.return`に実際の値）で返します。
  */
 final class ControllerMethodBuilder {
   private ControllerMethodBuilder() {}
@@ -112,10 +109,10 @@ final class ControllerMethodBuilder {
    * @param method サービスインターフェースのメソッド宣言
    * @param returnType メソッドの戻り値型名
    * @param argNames CORBA呼び出し引数変数名の一覧（out引数はHolder変数名）
-   * @param rpcResponseFqn `XxxRpcResponse`の完全修飾クラス名
-   * @param rpcResultFqn `XxxRpcResult`の完全修飾クラス名
+   * @param rpcResponseFqn `XxxRpcResponse` の完全修飾クラス名
+   * @param rpcResultFqn `XxxRpcResult` の完全修飾クラス名
    * @param ctx コード生成コンテキスト
-   * @return `XxxRpcResult`への代入とreturn文を含むコード文字列
+   * @return `XxxRpcResult` への代入とreturn文を含むコード文字列
    */
   private static String buildOutParamResponseDto(
       MethodDeclaration method,
@@ -158,8 +155,8 @@ final class ControllerMethodBuilder {
    * @param method サービスインターフェースのメソッド宣言
    * @param returnType メソッドの戻り値型名
    * @param callArgs CORBA呼び出しの引数リスト文字列
-   * @param rpcResponseFqn `XxxRpcResponse`の完全修飾クラス名
-   * @param rpcResultFqn `XxxRpcResult`の完全修飾クラス名
+   * @param rpcResponseFqn `XxxRpcResponse` の完全修飾クラス名
+   * @param rpcResultFqn `XxxRpcResult` の完全修飾クラス名
    * @param ctx コード生成コンテキスト
    * @return CORBA呼び出しと`XxxRpcResponse`でラップしたreturn文のコード文字列
    */
@@ -206,9 +203,9 @@ final class ControllerMethodBuilder {
    * in引数1つ分のDTO→CORBA変換コード文字列を返す。Holder型（out引数）はこのメソッドの対象外です。
    *
    * - プリミティブ/String: `req`フィールドをそのまま代入
-   * - Any: `AnyMapper.toAny()`を経由
-   * - 配列型: `Arrays.stream().map(Mapper::fromDto).toArray()`で変換
-   * - 独自型: `XxxMapper.fromDto()`で変換
+   * - Any: `AnyMapper.toAny()` を経由
+   * - 配列型: `Arrays.stream().map(Mapper::fromDto).toArray()` で変換
+   * - 独自型: `XxxMapper.fromDto()` で変換
    *
    * @param param 対象のメソッドパラメーター宣言
    * @param argName 生成するローカル変数名
@@ -250,10 +247,10 @@ final class ControllerMethodBuilder {
   /**
    * 型付き`XxxRpcResponse`を構築してreturnするコード文字列を生成する
    *
-   * @param valueExpr `result.return`に設定する式
-   * @param rpcResponseFqn `XxxRpcResponse`の完全修飾クラス名
-   * @param rpcResultFqn `XxxRpcResult`の完全修飾クラス名
-   * @return `XxxRpcResponse`を構築してreturnするコード文字列
+   * @param valueExpr `result.return` に設定する式
+   * @param rpcResponseFqn `XxxRpcResponse` の完全修飾クラス名
+   * @param rpcResultFqn `XxxRpcResult` の完全修飾クラス名
+   * @return `XxxRpcResponse` を構築してreturnするコード文字列
    */
   private static String buildRpcReturn(String valueExpr, String rpcResponseFqn, String rpcResultFqn) {
     return """

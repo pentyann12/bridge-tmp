@@ -63,12 +63,12 @@ final class AnyTypeWriter {
   /**
    * CORBA.Any⇔AnyValue相互変換Mapperを出力する
    *
-   * <p>プリミティブ型の分岐は{@code KIND_HANDLERS}（{@code Map<Integer, Function<Any,AnyValue>>}）で処理し、 {@code
-   * toAnyValue}自体のバイト数を最小化します。
+   * プリミティブ型の分岐は`KIND_HANDLERS`（`Map<Integer, Function<Any,AnyValue>>`）で処理し、
+   * `toAnyValue`自体のバイト数を最小化します。
    *
-   * <p>{@code tk_struct}については{@code STRUCT_HANDLERS}（{@code Map<String, Function<Any,AnyValue>>}）で
-   * TypeCode IDから直接Mapperを引きます。エントリ数が多くてもstatic initializerの65535バイト制限に 引っかからないよう、{@code
-   * initStructHandlersN()}メソッドへチャンク分割して登録します。
+   * `tk_struct`については`STRUCT_HANDLERS`（`Map<String, Function<Any,AnyValue>>`）で
+   * TypeCode IDから直接Mapperを引きます。エントリ数が多くてもstatic initializerの65535バイト制限に
+   * 引っかからないよう、`initStructHandlersN()`メソッドへチャンク分割して登録します。
    *
    * @param ctx コード生成コンテキスト（`ctx.idlPackagePrefix()`・`ctx.repoIdPrefix()`を含む）
    * @param structClasses IDLスタブから収集した構造体クラス一覧

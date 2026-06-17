@@ -47,7 +47,7 @@ record GenContext(
    *
    * @param servicePackage サービスが属するパッケージ
    * @param returnAsDto 複雑な戻り値型をDTOに変換するかどうか
-   * @return サービス固有フィールドを持つ新しい {@link GenContext}
+   * @return サービス固有フィールドを持つ新しい`GenContext`
    */
   GenContext withService(String servicePackage, boolean returnAsDto) {
     return new GenContext(

@@ -13,13 +13,11 @@ import java.util.List;
 /**
  * CORBAサービスをRESTエンドポイントとして公開するSpring Bootプロジェクト（Gradle）を生成するユーティリティ
  *
- * <p>主な生成フロー:
+ * 主な生成フロー:
  *
- * <ol>
- *   1. {@link #setupProject}でディレクトリ・共通ファイル・スタブコピー・構造体DTO/Mapperを出力 2. {@link
- *   #generateService}でサービスごとのRequestDto/ResponseDto・CorbaClient・Controllerを出力 3. {@link
- *   ServiceDtoWriter#writeApplicationProperties}でIOR設定ファイルを出力
- * </ol>
+ * 1. `#setupProject` でディレクトリ・共通ファイル・スタブコピー・構造体DTO/Mapperを出力
+ * 2. `#generateService` でサービスごとのRequestDto/ResponseDto・CorbaClient・Controllerを出力
+ * 3. `ServiceDtoWriter#writeApplicationProperties` でIOR設定ファイルを出力
  */
 public class SpringBootProjectGenerator {
 
@@ -53,16 +51,15 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * 複数のCORBAサービスインターフェースをまとめて単一のSpring Bootプロジェクトに生成 サービスごとに専用のCorbaClient（例: {@code
-   * ItemServiceCorbaClient}）とControllerが生成されます
+   * 複数のCORBAサービスインターフェースをまとめて単一のSpring Bootプロジェクトに生成 サービスごとに専用のCorbaClient（例: `ItemServiceCorbaClient`）とControllerが生成されます
    *
    * @param services CORBA サービスインターフェースのクラス宣言一覧
    * @param stubSourceRoot idlj によって生成されたスタブソースのルートディレクトリ
    * @param outputDir 生成する Spring Boot プロジェクトの出力ディレクトリ
    * @param basePkgName 生成プロジェクトのベースパッケージ名
    * @param returnAsDto 複雑な戻り値型を DTO に変換するかどうか
-   * @param idlPackagePrefix idlj {@code -pkgPrefix} に渡したパッケージプレフィックス
-   * @param repoIdPrefix IDL {@code #pragma prefix} で設定されたリポジトリIDプレフィックス
+   * @param idlPackagePrefix idlj `-pkgPrefix` に渡したパッケージプレフィックス
+   * @param repoIdPrefix IDL `#pragma prefix` で設定されたリポジトリIDプレフィックス
    */
   public static void generateAll(
       List<ClassOrInterfaceDeclaration> services,
@@ -87,17 +84,17 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * プロジェクトの共通部分（ディレクトリ・ビルドファイル・共有クラス・スタブ・構造体DTO/Mapper）を生成し、ベースの{@link GenContext}を返す
+   * プロジェクトの共通部分（ディレクトリ・ビルドファイル・共有クラス・スタブ・構造体DTO/Mapper）を生成し、ベースの`GenContext`を返す
    *
-   * <p>返す {@link GenContext} は {@code servicePackage=""}, {@code returnAsDto=false}
-   * のプレースホルダー値を持つ。サービス固有のコンテキストは {@link GenContext#withService} で生成すること。
+   * 返す`GenContext`は`servicePackage=""`、`returnAsDto=false`のプレースホルダー値を持つ。
+   * サービス固有のコンテキストは`GenContext#withService`で生成すること。
    *
    * @param stubSourceRoot スタブのルートディレクトリ
    * @param outputDir Spring Boot プロジェクトの出力先
    * @param basePkgName ベースパッケージ名
-   * @param idlPackagePrefix idlj {@code -pkgPrefix} に渡したパッケージプレフィックス
-   * @param repoIdPrefix IDL {@code #pragma prefix} で設定されたリポジトリIDプレフィックス
-   * @return ディレクトリ・IDL設定を持つベースの {@link GenContext}
+   * @param idlPackagePrefix idlj `-pkgPrefix` に渡したパッケージプレフィックス
+   * @param repoIdPrefix IDL `#pragma prefix` で設定されたリポジトリIDプレフィックス
+   * @return ディレクトリ・IDL設定を持つベースの`GenContext`
    */
   private static GenContext setupProject(
       Path stubSourceRoot,
@@ -142,12 +139,12 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * ベースの {@link GenContext} にサービス固有の設定を適用した {@link GenContext} を返す
+   * ベースの`GenContext`にサービス固有の設定を適用した`GenContext`を返す
    *
    * @param serviceIface サービスインターフェースのクラス宣言
    * @param returnAsDto 複雑な戻り値型をDTOに変換するかどうか
-   * @param baseCtx {@link #setupProject} が返したベースの {@link GenContext}
-   * @return サービス固有フィールドを持つ {@link GenContext}
+   * @param baseCtx `#setupProject` が返したベースの`GenContext`
+   * @return サービス固有フィールドを持つ`GenContext`
    */
   private static GenContext serviceCtx(
       ClassOrInterfaceDeclaration serviceIface, boolean returnAsDto, GenContext baseCtx) {

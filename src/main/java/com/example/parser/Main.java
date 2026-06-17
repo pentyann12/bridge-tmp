@@ -149,8 +149,8 @@ public class Main {
    * @param idljPath idljのjarファイルパス
    * @param idlFile 処理対象のIDLファイル（絶対パス）
    * @param stubRoot 生成スタブの出力先ルートディレクトリ
-   * @param idlPackagePrefix {@code -pkgPrefix} に渡すパッケージプレフィックス
-   * @param packageTargets {@code -pkgPrefix} のターゲット名一覧
+   * @param idlPackagePrefix `-pkgPrefix` に渡すパッケージプレフィックス
+   * @param packageTargets `-pkgPrefix` のターゲット名一覧
    */
   private static void runIdlj(
       Path idljPath,
@@ -233,11 +233,11 @@ public class Main {
   }
 
   /**
-   * 指定したIDLファイルとそのincludeファイルを解析し、{@code #pragma prefix}で設定された
+   * 指定したIDLファイルとそのincludeファイルを解析し、`#pragma prefix`で設定された
    * リポジトリIDプレフィックスを返す。複数あれば最初に見つかったものを返す。
    *
    * @param idlFile ルートのIDLファイル
-   * @return {@code #pragma prefix} の値。見つからなければ空文字列
+   * @return `#pragma prefix` の値。見つからなければ空文字列
    */
   private static String collectRepoIdPrefix(Path idlFile) throws IOException {
     Set<Path> includedFiles = new LinkedHashSet<>();
@@ -251,7 +251,7 @@ public class Main {
   }
 
   /**
-   * 指定したIDLファイルとそのincludeファイルを解析し、`idlj -pkgPrefix`に渡すターゲット名を収集する
+   * 指定したIDLファイルとそのincludeファイルを解析し、`idlj -pkgPrefix` に渡すターゲット名を収集する
    *
    * @param idlFile ルートのIDLファイル
    * @return パッケージプレフィックスターゲットの一覧
@@ -328,8 +328,8 @@ public class Main {
   /**
    * idljがデフォルトパッケージ（stubRoot直下）に出力した .javaファイルを 適切なパッケージへ移動し、それを参照しているimport文を更新する
    *
-   * <p>IDLの仕様上、グローバルスコープで定義されたtypedef sequenceは モジュール外のデフォルトパッケージに出力されるため、名前付きパッケージからimport
-   * できないこのメソッドはその問題を後処理として修正する
+   * IDLの仕様上、グローバルスコープで定義されたtypedef sequenceは モジュール外のデフォルトパッケージに出力されるため、名前付きパッケージからimport
+   * できない。このメソッドはその問題を後処理として修正する
    *
    * @param stubRoot idlj の出力先ルートディレクトリ
    * @param idlPackagePrefix -pkgPrefix に渡したパッケージプレフィックス（空の場合は自動推定）
@@ -374,7 +374,7 @@ public class Main {
   }
 
   /**
-   * `import Foo;`形式のベアインポートを`import pkg.Foo;`形式の完全修飾インポートに書き換える
+   * `import Foo;` 形式のベアインポートを`import pkg.Foo;` 形式の完全修飾インポートに書き換える。
    * 移動先ディレクトリ内のファイルは同一パッケージ内のためインポート自体を削除する
    *
    * @param stubRoot スタブディレクトリ
@@ -493,9 +493,11 @@ public class Main {
   }
 
   /**
-   * グローバルスコープスタブの移動先パッケージを決定する 優先順位は
+   * グローバルスコープスタブの移動先パッケージを決定する。優先順位は以下のとおり:
    *
-   * <p>1. idlPackagePrefixが空でなければそれ2. 既存スタブのpackage宣言から共通プレフィックスを求めて使用3. 上記が得られなければgenerated
+   * 1. `idlPackagePrefix` が空でなければそれを使用
+   * 2. 既存スタブのpackage宣言から共通プレフィックスを求めて使用
+   * 3. 上記が得られなければ `generated`
    *
    * @param stubRoot スタブのディレクトリ
    * @param idlPackagePrefix コマンド引数の-pkgPrefix

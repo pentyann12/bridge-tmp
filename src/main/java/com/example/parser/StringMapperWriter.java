@@ -11,7 +11,7 @@ final class StringMapperWriter {
   /**
    * StringMapperクラスを出力する
    *
-   * <p>CORBAサーバーがISO-8859-1として送ってくるSJISバイト列を正しい文字列に変換します。
+   * CORBAサーバーがISO-8859-1として送ってくるSJISバイト列を正しい文字列に変換します。
    *
    * @param ctx コード生成コンテキスト
    */

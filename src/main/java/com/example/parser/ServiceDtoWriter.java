@@ -31,9 +31,8 @@ final class ServiceDtoWriter {
   /**
    * CORBAサービスメソッド用のリクエストDTOとJSON-RPCラッパークラスを出力する
    *
-   * <p>{@code XxxRequestDto}に加え、JSON-RPC形式のリクエストボディに対応する{@code XxxRpcRequest} も生成します。{@code
-   * XxxRpcRequest}は{@code jsonrpc}・{@code method}・{@code id}・{@code params} フィールドを持ち、{@code
-   * params}の型は{@code XxxRequestDto}です。
+   * `XxxRequestDto`に加え、JSON-RPC形式のリクエストボディに対応する`XxxRpcRequest`も生成します。
+   * `XxxRpcRequest`は`jsonrpc`・`method`・`id`・`params`フィールドを持ち、`params`の型は`XxxRequestDto`です。
    *
    * @param method サービスメソッドの宣言
    * @param ctx コード生成コンテキスト
@@ -78,12 +77,10 @@ final class ServiceDtoWriter {
   /**
    * JSON-RPCレスポンス用の型付きクラスを出力する
    *
-   * <p>以下の2クラスを生成します:
+   * 以下の2クラスを生成します:
    *
-   * <ul>
-   *   - {@code XxxRpcResult}—{@code @JsonProperty("return")}を付けた{@code returnValue}フィールドを持つ -
-   *   {@code XxxRpcResponse}—{@code jsonrpc="2.0"}・{@code id=1}・{@code result: XxxRpcResult}
-   * </ul>
+   * - `XxxRpcResult` — `@JsonProperty("return")` を付けた`returnValue`フィールドを持つ
+   * - `XxxRpcResponse` — `jsonrpc="2.0"`・`id=1`・`result: XxxRpcResult`
    *
    * @param method サービスメソッドの宣言
    * @param ctx コード生成コンテキスト

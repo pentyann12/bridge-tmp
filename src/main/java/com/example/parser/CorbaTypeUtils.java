@@ -71,7 +71,7 @@ final class CorbaTypeUtils {
    * 変換不要のプリミティブ相当として扱うためです
    *
    * @param type 判定する型名
-   * @return プリミティブ型またはStringであればtrue
+   * @return プリミティブ型またはStringであれば`true`
    */
   static boolean isPrimitiveType(String type) {
     if (type == null) return false;
@@ -96,7 +96,7 @@ final class CorbaTypeUtils {
    * Holder型（CORBA out/inoutパラメーター）かどうかを判定 単純名が "Holder" で終わるクラスをHolder型とみなす
    *
    * @param typeName 型名（単純名またはFQN）
-   * @return Holder型であればtrue
+   * @return Holder型であれば`true`
    */
   static boolean isHolderType(String typeName) {
     return simpleName(typeName).endsWith("Holder");
@@ -105,7 +105,7 @@ final class CorbaTypeUtils {
   /**
    * メソッド定義のimport文を参照して単純型名を完全修飾名に解決
    *
-   * <p>JavaParserはシンボル解決なしでパースするため、IDLから生成されたスタブのimport文をスキャンして正しいパッケージを特定 グローバルスコープの型が
+   * JavaParserはシンボル解決なしでパースするため、IDLから生成されたスタブのimport文をスキャンして正しいパッケージを特定 グローバルスコープの型が
    * idlPackagePrefix直下へ再配置された場合でも正しく解決できます
    *
    * @param type 解決したい型名（単純名または配列型、例: "GlobalTag[]"）
@@ -144,7 +144,7 @@ final class CorbaTypeUtils {
    * @param holderType Holder型の名前（単純名またはFQN）
    * @param method 型が参照されているメソッド宣言
    * @param ctx コード生成コンテキスト
-   * @return valueフィールドの型名
+   * @return `value`フィールドの型名
    */
   static String resolveHolderValueType(
       String holderType, MethodDeclaration method, GenContext ctx) {
@@ -208,11 +208,11 @@ final class CorbaTypeUtils {
   /**
    * CORBA型名をジェネレーター内部のDTO型名へマップ
    *
-   * <ul>
-   *   - 配列型: 要素型を再帰変換して{@code []}を付け直す（例: {@code com.pkg.Foo[]→dto.FooDto[]}） - {@code
-   *   org.omg.CORBA.Any}: {@code AnyValue}へマップ - FQNを持つ型: 単純名 + {@code "Dto"} - プリミティブ/String:
-   *   そのまま返す - 単純名の独自型: パッケージプレフィックスを追加して{@code "Dto"}を付ける
-   * </ul>
+   * - 配列型: 要素型を再帰変換して`[]`を付け直す（例: `com.pkg.Foo[]` → `dto.FooDto[]`）
+   * - `org.omg.CORBA.Any`: `AnyValue` へマップ
+   * - FQNを持つ型: 単純名 + `"Dto"`
+   * - プリミティブ/String: そのまま返す
+   * - 単純名の独自型: パッケージプレフィックスを追加して`"Dto"`を付ける
    *
    * @param basePackage ベースパッケージ名
    * @param typeNameString マップ元の型名
