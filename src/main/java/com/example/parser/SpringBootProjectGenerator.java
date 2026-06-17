@@ -44,11 +44,12 @@ public class SpringBootProjectGenerator {
       String repoIdPrefix)
       throws IOException {
 
-    ProjectLayout layout =
+    GenContext baseCtx =
         setupProject(stubSourceRoot, outputDir, basePkgName, idlPackagePrefix, repoIdPrefix);
     String serviceName = CorbaTypeUtils.toServiceName(serviceIface);
-    generateService(serviceIface, serviceName, layout, basePkgName, returnAsDto, "CorbaClient");
-    ServiceDtoWriter.writeApplicationProperties(outputDir, List.of(serviceName));
+    GenContext ctx = serviceCtx(serviceIface, returnAsDto, baseCtx);
+    generateService(serviceIface, serviceName, ctx, "CorbaClient");
+    ServiceDtoWriter.writeApplicationProperties(ctx, List.of(serviceName));
   }
 
   /**
@@ -73,29 +74,32 @@ public class SpringBootProjectGenerator {
       String repoIdPrefix)
       throws IOException {
 
-    ProjectLayout layout =
+    GenContext baseCtx =
         setupProject(stubSourceRoot, outputDir, basePkgName, idlPackagePrefix, repoIdPrefix);
     List<String> serviceNames = new ArrayList<>();
     for (ClassOrInterfaceDeclaration serviceIface : services) {
       String serviceName = CorbaTypeUtils.toServiceName(serviceIface);
       serviceNames.add(serviceName);
-      generateService(
-          serviceIface, serviceName, layout, basePkgName, returnAsDto, serviceName + "CorbaClient");
+      GenContext ctx = serviceCtx(serviceIface, returnAsDto, baseCtx);
+      generateService(serviceIface, serviceName, ctx, serviceName + "CorbaClient");
     }
-    ServiceDtoWriter.writeApplicationProperties(outputDir, serviceNames);
+    ServiceDtoWriter.writeApplicationProperties(baseCtx, serviceNames);
   }
 
   /**
-   * プロジェクトの共通部分（ディレクトリ・ビルドファイル・共有クラス・スタブ・構造体DTO/Mapper）を生成し、出力先のレイアウト情報を返す
+   * プロジェクトの共通部分（ディレクトリ・ビルドファイル・共有クラス・スタブ・構造体DTO/Mapper）を生成し、ベースの{@link GenContext}を返す
+   *
+   * <p>返す {@link GenContext} は {@code servicePackage=""}, {@code returnAsDto=false}
+   * のプレースホルダー値を持つ。サービス固有のコンテキストは {@link GenContext#withService} で生成すること。
    *
    * @param stubSourceRoot スタブのルートディレクトリ
    * @param outputDir Spring Boot プロジェクトの出力先
    * @param basePkgName ベースパッケージ名
    * @param idlPackagePrefix idlj {@code -pkgPrefix} に渡したパッケージプレフィックス
    * @param repoIdPrefix IDL {@code #pragma prefix} で設定されたリポジトリIDプレフィックス
-   * @return 生成先ディレクトリ群を保持するレイアウト情報
+   * @return ディレクトリ・IDL設定を持つベースの {@link GenContext}
    */
-  private static ProjectLayout setupProject(
+  private static GenContext setupProject(
       Path stubSourceRoot,
       Path outputDir,
       String basePkgName,
@@ -105,34 +109,55 @@ public class SpringBootProjectGenerator {
     Path javaDir = outputDir.resolve("src/main/java");
     Path pkgBaseDir = javaDir.resolve(basePkgName.replace('.', '/'));
     Path controllerDir = pkgBaseDir.resolve("controller");
-    Path dtoDir = pkgBaseDir.resolve("dto");
-    Path mapperDir = pkgBaseDir.resolve("mapper");
     Path corbaDir = pkgBaseDir.resolve("corba");
 
+    GenContext ctx =
+        new GenContext(
+            basePkgName, "", false, idlPackagePrefix, repoIdPrefix,
+            javaDir, controllerDir, corbaDir, stubSourceRoot);
+
     Files.createDirectories(controllerDir);
-    Files.createDirectories(dtoDir);
-    Files.createDirectories(mapperDir);
+    Files.createDirectories(ctx.dtoDir());
+    Files.createDirectories(ctx.mapperDir());
     Files.createDirectories(corbaDir);
-    Files.createDirectories(outputDir.resolve("src/main/resources"));
+    Files.createDirectories(ctx.resourcesDir());
 
     ProjectScaffolder.writeBuildGradle(outputDir);
     ProjectScaffolder.writeApplicationClass(basePkgName, pkgBaseDir);
     ProjectScaffolder.writeServletClass(basePkgName, pkgBaseDir);
     StubHandler.copyIdlStubSources(stubSourceRoot, javaDir);
-    AnyTypeWriter.writeAnyValueDto(dtoDir, basePkgName);
+    AnyTypeWriter.writeAnyValueDto(ctx);
     // 構造体一覧を先に収集してAnyMapperのtk_struct生成にも渡す
     List<ClassOrInterfaceDeclaration> structClasses =
         StubHandler.collectStructClasses(stubSourceRoot);
-    AnyTypeWriter.writeAnyMapper(
-        mapperDir, basePkgName, structClasses, idlPackagePrefix, repoIdPrefix);
-    StringMapperWriter.write(mapperDir, basePkgName);
+    AnyTypeWriter.writeAnyMapper(ctx, structClasses);
+    StringMapperWriter.write(ctx);
 
     for (ClassOrInterfaceDeclaration structClass : structClasses) {
-      DtoGenerator.generate(structClass, javaDir, basePkgName);
-      MapperGenerator.generate(structClass, javaDir, basePkgName);
+      DtoGenerator.generate(structClass, ctx);
+      MapperGenerator.generate(structClass, ctx);
     }
 
-    return new ProjectLayout(javaDir, controllerDir, corbaDir, stubSourceRoot);
+    return ctx;
+  }
+
+  /**
+   * ベースの {@link GenContext} にサービス固有の設定を適用した {@link GenContext} を返す
+   *
+   * @param serviceIface サービスインターフェースのクラス宣言
+   * @param returnAsDto 複雑な戻り値型をDTOに変換するかどうか
+   * @param baseCtx {@link #setupProject} が返したベースの {@link GenContext}
+   * @return サービス固有フィールドを持つ {@link GenContext}
+   */
+  private static GenContext serviceCtx(
+      ClassOrInterfaceDeclaration serviceIface, boolean returnAsDto, GenContext baseCtx) {
+    String servicePackage =
+        serviceIface
+            .findCompilationUnit()
+            .flatMap(CompilationUnit::getPackageDeclaration)
+            .map(PackageDeclaration::getNameAsString)
+            .orElse("");
+    return baseCtx.withService(servicePackage, returnAsDto);
   }
 
   /**
@@ -140,46 +165,25 @@ public class SpringBootProjectGenerator {
    *
    * @param serviceIface サービスインターフェースのクラス宣言
    * @param serviceName サービス名（"Operations" サフィックスを除いたもの）
-   * @param layout 出力先ディレクトリ群
-   * @param basePkgName ベースパッケージ名
-   * @param returnAsDto 複雑な戻り値型を DTO に変換するかどうか
+   * @param ctx コード生成コンテキスト
    * @param clientClassName 生成する CorbaClient クラスの名前（例: "CorbaClient", "ItemServiceCorbaClient"）
    */
   private static void generateService(
       ClassOrInterfaceDeclaration serviceIface,
       String serviceName,
-      ProjectLayout layout,
-      String basePkgName,
-      boolean returnAsDto,
+      GenContext ctx,
       String clientClassName)
       throws IOException {
-
-    String servicePackage =
-        serviceIface
-            .findCompilationUnit()
-            .flatMap(CompilationUnit::getPackageDeclaration)
-            .map(PackageDeclaration::getNameAsString)
-            .orElse("");
 
     List<MethodDeclaration> methods = serviceIface.getMethods();
     // メソッドがないサービスはクライアントもコントローラーも生成しない
     if (methods.isEmpty()) return;
     for (MethodDeclaration method : methods) {
-      ServiceDtoWriter.generateRequestDto(method, layout.javaDir, basePkgName);
-      ServiceDtoWriter.generateRpcResponse(
-          method, layout.javaDir, basePkgName, returnAsDto, servicePackage, layout.stubSourceRoot);
+      ServiceDtoWriter.generateRequestDto(method, ctx);
+      ServiceDtoWriter.generateRpcResponse(method, ctx);
     }
 
-    CorbaClientWriter.write(
-        serviceName, servicePackage, methods, layout.corbaDir, basePkgName, clientClassName);
-    ControllerWriter.write(
-        serviceName,
-        servicePackage,
-        methods,
-        layout.controllerDir,
-        basePkgName,
-        returnAsDto,
-        layout.stubSourceRoot,
-        clientClassName);
+    CorbaClientWriter.write(serviceName, methods, clientClassName, ctx);
+    ControllerWriter.write(serviceName, methods, clientClassName, ctx);
   }
 }

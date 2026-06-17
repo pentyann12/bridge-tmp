@@ -368,7 +368,23 @@ public class Main {
     Set<String> movedClasses = classToFile.keySet();
     Path targetDirFullPath = targetDir.toAbsolutePath().normalize();
 
-    // インポート文を完全修飾名へ置換
+    rewriteExplicitImports(stubRoot, movedClasses, targetPackage, targetDirFullPath);
+    addImplicitImports(stubRoot, movedClasses, targetPackage, targetDirFullPath);
+    removeBareImports(stubRoot);
+  }
+
+  /**
+   * `import Foo;`形式のベアインポートを`import pkg.Foo;`形式の完全修飾インポートに書き換える
+   * 移動先ディレクトリ内のファイルは同一パッケージ内のためインポート自体を削除する
+   *
+   * @param stubRoot スタブディレクトリ
+   * @param movedClasses 移動したクラス名の集合
+   * @param targetPackage 移動先パッケージ名
+   * @param targetDirFullPath 移動先ディレクトリの正規化絶対パス
+   */
+  private static void rewriteExplicitImports(
+      Path stubRoot, Set<String> movedClasses, String targetPackage, Path targetDirFullPath)
+      throws IOException {
     rewriteStubs(
         stubRoot,
         p -> true,
@@ -376,10 +392,7 @@ public class Main {
           String s = content;
           for (String cls : movedClasses) {
             String bare = "import " + cls + ";";
-            if (!s.contains(bare)) {
-              continue;
-            }
-
+            if (!s.contains(bare)) continue;
             s =
                 path.toAbsolutePath().normalize().getParent().equals(targetDirFullPath)
                     ? s.replace(bare + "\n", "").replace(bare + "\r\n", "").replace(bare, "")
@@ -387,8 +400,20 @@ public class Main {
           }
           return s;
         });
+  }
 
-    // 暗黙的にクラス名を参照しているファイルにimportを追加
+  /**
+   * クラス名を直接参照しているがimportを持たないファイルに完全修飾インポートを追加する
+   * idljが生成するコードの一部はimport文なしでクラス名を参照するため後処理が必要
+   *
+   * @param stubRoot スタブディレクトリ
+   * @param movedClasses 移動したクラス名の集合
+   * @param targetPackage 移動先パッケージ名
+   * @param targetDirFullPath 移動先ディレクトリの正規化絶対パス（このディレクトリは処理対象外）
+   */
+  private static void addImplicitImports(
+      Path stubRoot, Set<String> movedClasses, String targetPackage, Path targetDirFullPath)
+      throws IOException {
     rewriteStubs(
         stubRoot,
         p -> !p.toAbsolutePath().normalize().getParent().equals(targetDirFullPath),
@@ -402,8 +427,15 @@ public class Main {
           }
           return s;
         });
+  }
 
-    // ベアインポートを削除
+  /**
+   * `import Foo;`形式のパッケージなしベアインポートを全て削除する
+   * 前ステップで解決済みのインポートが残留していた場合のクリーンアップ
+   *
+   * @param stubRoot スタブディレクトリ
+   */
+  private static void removeBareImports(Path stubRoot) throws IOException {
     Pattern bareImport =
         Pattern.compile(
             "^import [A-Za-z_][A-Za-z0-9_$]*;[ \\t]*(?:\\r\\n|\\r|\\n)?", Pattern.MULTILINE);

@@ -4,7 +4,6 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -17,29 +16,25 @@ final class CorbaClientWriter {
    * CorbaClientクラスを生成してファイルに書き出す
    *
    * @param serviceName サービス名（例: "ItemService"）
-   * @param servicePackage サービスが属するパッケージ
    * @param methods サービスインターフェースのメソッド一覧
-   * @param corbaDir 出力ディレクトリ
-   * @param basePackage ベースパッケージ名
    * @param clientClassName 生成するクラスの名前（例: "CorbaClient", "ItemServiceCorbaClient"）
+   * @param ctx コード生成コンテキスト
    */
   static void write(
       String serviceName,
-      String servicePackage,
       List<MethodDeclaration> methods,
-      Path corbaDir,
-      String basePackage,
-      String clientClassName)
+      String clientClassName,
+      GenContext ctx)
       throws IOException {
 
     String serviceImports =
-        servicePackage.isEmpty()
+        ctx.servicePackage().isEmpty()
             ? ""
             : """
           import %s.%s;
           import %s.%sHelper;
           """
-                .formatted(servicePackage, serviceName, servicePackage, serviceName);
+                .formatted(ctx.servicePackage(), serviceName, ctx.servicePackage(), serviceName);
 
     String methodsCode =
         methods.stream()
@@ -51,7 +46,7 @@ final class CorbaClientWriter {
                           .map(
                               p ->
                                   CorbaTypeUtils.resolveTypeFQN(
-                                          p.getType().asString(), method, servicePackage)
+                                          p.getType().asString(), method, ctx.servicePackage())
                                       + " "
                                       + p.getNameAsString())
                           .collect(Collectors.joining(", "));
@@ -72,7 +67,7 @@ final class CorbaClientWriter {
 
           """
                       .formatted(
-                          CorbaTypeUtils.resolveTypeFQN(returnType, method, servicePackage),
+                          CorbaTypeUtils.resolveTypeFQN(returnType, method, ctx.servicePackage()),
                           method.getNameAsString(),
                           params,
                           call);
@@ -101,7 +96,7 @@ final class CorbaClientWriter {
         %s}
         """
             .formatted(
-                basePackage,
+                ctx.basePackage(),
                 serviceImports,
                 clientClassName,
                 serviceName,
@@ -111,7 +106,7 @@ final class CorbaClientWriter {
                 methodsCode);
 
     Files.writeString(
-        corbaDir.resolve(clientClassName + ".java"),
+        ctx.corbaDir().resolve(clientClassName + ".java"),
         source,
         StandardOpenOption.CREATE,
         StandardOpenOption.TRUNCATE_EXISTING);

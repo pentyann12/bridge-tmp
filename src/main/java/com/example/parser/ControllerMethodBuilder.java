@@ -2,7 +2,6 @@ package com.example.parser;
 
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -26,20 +25,10 @@ final class ControllerMethodBuilder {
    * コントローラーメソッド1つ分のコード文字列を返す
    *
    * @param method サービスインターフェースのメソッド宣言
-   * @param basePackage ベースパッケージ名
-   * @param dtoPackage DTO パッケージ名
-   * @param servicePackage サービスが属するパッケージ
-   * @param returnAsDto 複雑な戻り値型を DTO に変換するかどうか
-   * @param stubRoot スタブのルートディレクトリ（Holder value 型解決に使用）
+   * @param ctx コード生成コンテキスト
    * @return コントローラーメソッドのソースコード文字列
    */
-  static String build(
-      MethodDeclaration method,
-      String basePackage,
-      String dtoPackage,
-      String servicePackage,
-      boolean returnAsDto,
-      Path stubRoot) {
+  static String build(MethodDeclaration method, GenContext ctx) {
 
     String methodName = method.getNameAsString();
     String returnType = method.getType().asString();
@@ -49,16 +38,16 @@ final class ControllerMethodBuilder {
     boolean hasInParams =
         method.getParameters().stream()
             .anyMatch(p -> !CorbaTypeUtils.isHolderType(p.getType().asString()));
-    String requestDtoType = dtoPackage + "." + CorbaTypeUtils.capitalize(methodName) + "RequestDto";
-    String rpcRequestType = dtoPackage + "." + CorbaTypeUtils.capitalize(methodName) + "RpcRequest";
-    String rpcResponseFqn =
-        dtoPackage + "." + CorbaTypeUtils.capitalize(methodName) + "RpcResponse";
-    String rpcResultFqn = dtoPackage + "." + CorbaTypeUtils.capitalize(methodName) + "RpcResult";
+    String cap = CorbaTypeUtils.capitalize(methodName);
+    String requestDtoFqn = ctx.dtoPackage() + "." + cap + "RequestDto";
+    String rpcRequestFqn = ctx.dtoPackage() + "." + cap + "RpcRequest";
+    String rpcResponseFqn = ctx.dtoPackage() + "." + cap + "RpcResponse";
+    String rpcResultFqn = ctx.dtoPackage() + "." + cap + "RpcResult";
 
     // JSON-RPC形式で受け取る: XxxRpcRequest.paramsがXxxRequestDto
-    String reqParam = hasInParams ? "@RequestBody " + rpcRequestType + " rpc" : "";
+    String reqParam = hasInParams ? "@RequestBody " + rpcRequestFqn + " rpc" : "";
     String paramsExtraction =
-        hasInParams ? "        %s req = rpc.params;\n".formatted(requestDtoType) : "";
+        hasInParams ? "        %s req = rpc.params;\n".formatted(requestDtoFqn) : "";
 
     String signature =
         """
@@ -77,12 +66,11 @@ final class ControllerMethodBuilder {
       if (CorbaTypeUtils.isHolderType(param.getType().asString())) {
         // out引数: 呼び出し前に空Holderを生成し、呼び出し後に .valueを取り出す
         String holderFqn =
-            CorbaTypeUtils.resolveTypeFQN(param.getType().asString(), method, servicePackage);
+            CorbaTypeUtils.resolveTypeFQN(param.getType().asString(), method, ctx.servicePackage());
         argConversions.append(
             "        %s %s = new %s();\n".formatted(holderFqn, argName, holderFqn));
       } else {
-        argConversions.append(
-            buildInArgConversion(param, argName, "req", basePackage, servicePackage, method));
+        argConversions.append(buildInArgConversion(param, argName, "req", method, ctx));
       }
     }
 
@@ -90,44 +78,22 @@ final class ControllerMethodBuilder {
     String body;
 
     if (hasOutParams) {
-      // CORBA呼び出し後にResponseDtoを構築してXxxRpcResponseで返す
+      // CORBA呼び出し後にXxxRpcResultへ直接代入してXxxRpcResponseで返す
       String callLine =
           "void".equals(returnType)
               ? "        client.%s(%s);\n".formatted(methodName, callArgs)
               : "        %s callResult = client.%s(%s);\n"
                   .formatted(
-                      CorbaTypeUtils.resolveTypeFQN(returnType, method, servicePackage),
+                      CorbaTypeUtils.resolveTypeFQN(returnType, method, ctx.servicePackage()),
                       methodName,
                       callArgs);
-      body =
-          callLine
-              + buildOutParamResponseDto(
-                  method,
-                  returnType,
-                  argNames,
-                  dtoPackage,
-                  basePackage,
-                  servicePackage,
-                  returnAsDto,
-                  stubRoot,
-                  rpcResponseFqn,
-                  rpcResultFqn);
+      body = callLine + buildOutParamResponseDto(method, returnType, argNames, rpcResponseFqn, rpcResultFqn, ctx);
     } else if ("void".equals(returnType)) {
       body =
           "        client.%s(%s);\n".formatted(methodName, callArgs)
-              + wrapResponse("null", rpcResponseFqn, rpcResultFqn);
+              + buildRpcReturn("null", rpcResponseFqn, rpcResultFqn);
     } else {
-      body =
-          buildDirectReturn(
-              method,
-              returnType,
-              callArgs,
-              basePackage,
-              dtoPackage,
-              servicePackage,
-              returnAsDto,
-              rpcResponseFqn,
-              rpcResultFqn);
+      body = buildDirectReturn(method, returnType, callArgs, rpcResponseFqn, rpcResultFqn, ctx);
     }
 
     String closing =
@@ -146,26 +112,18 @@ final class ControllerMethodBuilder {
    * @param method サービスインターフェースのメソッド宣言
    * @param returnType メソッドの戻り値型名
    * @param argNames CORBA呼び出し引数変数名の一覧（out引数はHolder変数名）
-   * @param dtoPackage DTOパッケージ名
-   * @param basePackage ベースパッケージ名
-   * @param servicePackage サービスが属するパッケージ
-   * @param returnAsDto 複雑な型をDTOに変換するかどうか
-   * @param stubRoot スタブのルートディレクトリ（Holder value型解決に使用）
    * @param rpcResponseFqn `XxxRpcResponse`の完全修飾クラス名
    * @param rpcResultFqn `XxxRpcResult`の完全修飾クラス名
+   * @param ctx コード生成コンテキスト
    * @return `XxxRpcResult`への代入とreturn文を含むコード文字列
    */
   private static String buildOutParamResponseDto(
       MethodDeclaration method,
       String returnType,
       List<String> argNames,
-      String dtoPackage,
-      String basePackage,
-      String servicePackage,
-      boolean returnAsDto,
-      Path stubRoot,
       String rpcResponseFqn,
-      String rpcResultFqn) {
+      String rpcResultFqn,
+      GenContext ctx) {
 
     StringBuilder sb = new StringBuilder();
     sb.append("        %s __result = new %s();\n".formatted(rpcResultFqn, rpcResultFqn));
@@ -173,27 +131,19 @@ final class ControllerMethodBuilder {
     if (!"void".equals(returnType)) {
       sb.append(
           "        __result.returnValue = %s;\n"
-              .formatted(
-                  CorbaTypeUtils.corbaToDtoExpr(
-                      "callResult", returnType, basePackage, dtoPackage, returnAsDto)));
+              .formatted(CorbaTypeUtils.corbaToDtoExpr("callResult", returnType, ctx)));
     }
 
     for (int i = 0; i < method.getParameters().size(); i++) {
       Parameter param = method.getParameters().get(i);
       if (!CorbaTypeUtils.isHolderType(param.getType().asString())) continue;
       String valueType =
-          CorbaTypeUtils.resolveHolderValueType(
-              param.getType().asString(), method, servicePackage, stubRoot);
+          CorbaTypeUtils.resolveHolderValueType(param.getType().asString(), method, ctx);
       sb.append(
           "        __result.%s = %s;\n"
               .formatted(
                   param.getNameAsString(),
-                  CorbaTypeUtils.corbaToDtoExpr(
-                      argNames.get(i) + ".value",
-                      valueType,
-                      basePackage,
-                      dtoPackage,
-                      returnAsDto)));
+                  CorbaTypeUtils.corbaToDtoExpr(argNames.get(i) + ".value", valueType, ctx)));
     }
 
     sb.append("        %s __response = new %s();\n".formatted(rpcResponseFqn, rpcResponseFqn));
@@ -208,24 +158,18 @@ final class ControllerMethodBuilder {
    * @param method サービスインターフェースのメソッド宣言
    * @param returnType メソッドの戻り値型名
    * @param callArgs CORBA呼び出しの引数リスト文字列
-   * @param basePackage ベースパッケージ名
-   * @param dtoPackage DTOパッケージ名
-   * @param servicePackage サービスが属するパッケージ
-   * @param returnAsDto 複雑な型をDTOに変換するかどうか
    * @param rpcResponseFqn `XxxRpcResponse`の完全修飾クラス名
    * @param rpcResultFqn `XxxRpcResult`の完全修飾クラス名
+   * @param ctx コード生成コンテキスト
    * @return CORBA呼び出しと`XxxRpcResponse`でラップしたreturn文のコード文字列
    */
   private static String buildDirectReturn(
       MethodDeclaration method,
       String returnType,
       String callArgs,
-      String basePackage,
-      String dtoPackage,
-      String servicePackage,
-      boolean returnAsDto,
       String rpcResponseFqn,
-      String rpcResultFqn) {
+      String rpcResultFqn,
+      GenContext ctx) {
 
     String methodName = method.getNameAsString();
 
@@ -234,26 +178,25 @@ final class ControllerMethodBuilder {
       String valueExpr =
           "String".equals(returnType)
               ? "%s.mapper.StringMapper.encode(client.%s(%s))"
-                  .formatted(basePackage, methodName, callArgs)
+                  .formatted(ctx.basePackage(), methodName, callArgs)
               : "client.%s(%s)".formatted(methodName, callArgs);
-      return wrapResponse(valueExpr, rpcResponseFqn, rpcResultFqn);
+      return buildRpcReturn(valueExpr, rpcResponseFqn, rpcResultFqn);
     } else if ("org.omg.CORBA.Any".equals(returnType)) {
       String valueExpr =
-          returnAsDto
+          ctx.returnAsDto()
               ? "%s.mapper.AnyMapper.toAnyValue(client.%s(%s))"
-                  .formatted(basePackage, methodName, callArgs)
+                  .formatted(ctx.basePackage(), methodName, callArgs)
               : "client.%s(%s)".formatted(methodName, callArgs);
-      return wrapResponse(valueExpr, rpcResponseFqn, rpcResultFqn);
+      return buildRpcReturn(valueExpr, rpcResponseFqn, rpcResultFqn);
     } else {
       // 独自型または配列: result変数に受けてから変換する
       return "        %s result = client.%s(%s);\n"
               .formatted(
-                  CorbaTypeUtils.resolveTypeFQN(returnType, method, servicePackage),
+                  CorbaTypeUtils.resolveTypeFQN(returnType, method, ctx.servicePackage()),
                   methodName,
                   callArgs)
-          + wrapResponse(
-              CorbaTypeUtils.corbaToDtoExpr(
-                  "result", returnType, basePackage, dtoPackage, returnAsDto),
+          + buildRpcReturn(
+              CorbaTypeUtils.corbaToDtoExpr("result", returnType, ctx),
               rpcResponseFqn,
               rpcResultFqn);
     }
@@ -270,18 +213,16 @@ final class ControllerMethodBuilder {
    * @param param 対象のメソッドパラメーター宣言
    * @param argName 生成するローカル変数名
    * @param handlerName リクエストオブジェクトの変数名（例: "req"）
-   * @param basePackage ベースパッケージ名
-   * @param servicePackage サービスが属するパッケージ
    * @param method 型が参照されているメソッド宣言（FQN解決に使用）
+   * @param ctx コード生成コンテキスト
    * @return DTO→CORBA変換の代入文コード文字列
    */
   private static String buildInArgConversion(
       Parameter param,
       String argName,
       String handlerName,
-      String basePackage,
-      String servicePackage,
-      MethodDeclaration method) {
+      MethodDeclaration method,
+      GenContext ctx) {
 
     String paramType = param.getType().asString();
     String paramSimple = CorbaTypeUtils.simpleName(paramType);
@@ -291,18 +232,18 @@ final class ControllerMethodBuilder {
       return "        %s %s = %s;\n".formatted(paramType, argName, fieldRef);
     } else if ("org.omg.CORBA.Any".equals(paramType)) {
       return "        org.omg.CORBA.Any %s = %s.mapper.AnyMapper.toAny(%s);\n"
-          .formatted(argName, basePackage, fieldRef);
+          .formatted(argName, ctx.basePackage(), fieldRef);
     } else if (paramSimple.endsWith("[]")) {
       String elemSimple = paramSimple.substring(0, paramSimple.length() - 2);
-      String fqnParam = CorbaTypeUtils.resolveTypeFQN(paramType, method, servicePackage);
+      String fqnParam = CorbaTypeUtils.resolveTypeFQN(paramType, method, ctx.servicePackage());
       String elemFqn =
           fqnParam.endsWith("[]") ? fqnParam.substring(0, fqnParam.length() - 2) : fqnParam;
       return "        %s %s = %s == null ? null : java.util.Arrays.stream(%s).map(%s.mapper.%sMapper::fromDto).toArray(%s[]::new);\n"
-          .formatted(fqnParam, argName, fieldRef, fieldRef, basePackage, elemSimple, elemFqn);
+          .formatted(fqnParam, argName, fieldRef, fieldRef, ctx.basePackage(), elemSimple, elemFqn);
     } else {
-      String fqnParam = CorbaTypeUtils.resolveTypeFQN(paramType, method, servicePackage);
+      String fqnParam = CorbaTypeUtils.resolveTypeFQN(paramType, method, ctx.servicePackage());
       return "        %s %s = %s.mapper.%sMapper.fromDto(%s);\n"
-          .formatted(fqnParam, argName, basePackage, paramSimple, fieldRef);
+          .formatted(fqnParam, argName, ctx.basePackage(), paramSimple, fieldRef);
     }
   }
 
@@ -314,7 +255,7 @@ final class ControllerMethodBuilder {
    * @param rpcResultFqn `XxxRpcResult`の完全修飾クラス名
    * @return `XxxRpcResponse`を構築してreturnするコード文字列
    */
-  private static String wrapResponse(String valueExpr, String rpcResponseFqn, String rpcResultFqn) {
+  private static String buildRpcReturn(String valueExpr, String rpcResponseFqn, String rpcResultFqn) {
     return """
             %s __result = new %s();
             __result.returnValue = %s;

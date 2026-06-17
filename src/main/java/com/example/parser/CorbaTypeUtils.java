@@ -20,25 +20,17 @@ final class CorbaTypeUtils {
    * voidなら`Object`、それ以外は戻り値型に応じたDTO/プリミティブ型を返します。
    *
    * @param method サービスインターフェースのメソッド宣言
-   * @param basePackage ベースパッケージ名
-   * @param dtoPackage DTOパッケージ名
-   * @param servicePackage サービスが属するパッケージ（FQN解決のフォールバック用）
-   * @param returnAsDto 複雑な型をDTOに変換するかどうか
+   * @param ctx コード生成コンテキスト
    * @return 型名文字列
    */
-  static String resolveRpcReturnType(
-      MethodDeclaration method,
-      String basePackage,
-      String dtoPackage,
-      String servicePackage,
-      boolean returnAsDto) {
+  static String resolveRpcReturnType(MethodDeclaration method, GenContext ctx) {
     String returnType = method.getType().asString();
     if ("void".equals(returnType)) return "Object";
     if (isPrimitiveType(returnType)) return returnType;
     if ("org.omg.CORBA.Any".equals(returnType))
-      return returnAsDto ? basePackage + ".dto.AnyValue" : "org.omg.CORBA.Any";
-    if (!returnAsDto) return resolveTypeFQN(returnType, method, servicePackage);
-    return mapToDtoType(basePackage, returnType);
+      return ctx.returnAsDto() ? ctx.basePackage() + ".dto.AnyValue" : "org.omg.CORBA.Any";
+    if (!ctx.returnAsDto()) return resolveTypeFQN(returnType, method, ctx.servicePackage());
+    return mapToDtoType(ctx.basePackage(), returnType);
   }
 
   /**
@@ -143,22 +135,21 @@ final class CorbaTypeUtils {
   }
 
   /**
-   * Holder型（CORBA out/inoutパラメーター）の{@code value}フィールドの型名を返す
+   * Holder型（CORBA out/inoutパラメーター）の`value`フィールドの型名を返す
    *
-   * <p>CORBAプリミティブHolder（{@code org.omg.CORBA.IntHolder}等）はハードコードで対応し、 独自Holderはスタブファイルを解析して {@code
-   * value}フィールドの型を取得idljはsequence typedefに対して配列型の{@code value}フィールドを生成するため （例: {@code GlobalTag
-   * value[]}）、ファイル解析が必要です
+   * CORBAプリミティブHolder（`org.omg.CORBA.IntHolder`等）はハードコードで対応し、
+   * 独自Holderはスタブファイルを解析して`value`フィールドの型を取得します。
+   * idljはsequence typedefに対して配列型の`value`フィールドを生成するため（例: `GlobalTag value[]`）、ファイル解析が必要です
    *
-   * @param holderType Holder 型の名前（単純名または FQN）
+   * @param holderType Holder型の名前（単純名またはFQN）
    * @param method 型が参照されているメソッド宣言
-   * @param fallbackPackage FQN 解決のフォールバックパッケージ
-   * @param stubRoot スタブのルートディレクトリ（Holder ファイル解析に使用）
-   * @return value フィールドの型名
+   * @param ctx コード生成コンテキスト
+   * @return valueフィールドの型名
    */
   static String resolveHolderValueType(
-      String holderType, MethodDeclaration method, String fallbackPackage, Path stubRoot) {
+      String holderType, MethodDeclaration method, GenContext ctx) {
     String fqn =
-        holderType.contains(".") ? holderType : resolveTypeFQN(holderType, method, fallbackPackage);
+        holderType.contains(".") ? holderType : resolveTypeFQN(holderType, method, ctx.servicePackage());
     switch (fqn) {
       case "org.omg.CORBA.IntHolder":
         return "int";
@@ -181,10 +172,10 @@ final class CorbaTypeUtils {
       case "org.omg.CORBA.AnyHolder":
         return "org.omg.CORBA.Any";
     }
-    if (fqn.contains(".") && stubRoot != null) {
+    if (fqn.contains(".") && ctx.stubRoot() != null) {
       String pkg = fqn.substring(0, fqn.lastIndexOf('.'));
       String sName = fqn.substring(fqn.lastIndexOf('.') + 1);
-      Path holderFile = stubRoot.resolve(pkg.replace('.', '/') + "/" + sName + ".java");
+      Path holderFile = ctx.stubRoot().resolve(pkg.replace('.', '/') + "/" + sName + ".java");
       if (Files.exists(holderFile)) {
         try {
           return StaticJavaParser.parse(holderFile)
@@ -242,25 +233,22 @@ final class CorbaTypeUtils {
   /**
    * CORBA値をDTOへ変換する式（代入RHSとして使える文字列）を返す
    *
-   * <p>Stringは{@code returnAsDto}フラグに関係なく常に{@code StringMapper.encode()}でエンコードします
-   * （CORBAの文字列はISO-8859-1として渡されるSJISバイト列のため）。 それ以外のプリミティブ/Anyは{@code returnAsDto=false}
-   * のときそのまま返します。 配列型は{@code Arrays.stream().map(Mapper::toDto).toArray()}形式、 独自型は{@code
-   * XxxMapper.toDto(rhs)}形式になります
+   * Stringは`returnAsDto`フラグに関係なく常に`StringMapper.encode()`でエンコードします
+   * （CORBAの文字列はISO-8859-1として渡されるSJISバイト列のため）。
+   * それ以外のプリミティブ/Anyは`returnAsDto=false`のときそのまま返します。
+   * 配列型は`Arrays.stream().map(Mapper::toDto).toArray()`形式、独自型は`XxxMapper.toDto(rhs)`形式になります
    *
    * @param rhs 変換元の式（例: "result", "arg0.value"）
-   * @param valueType CORBA 側の型名（配列型 "Foo[]" でも可）
-   * @param basePackage ベースパッケージ名
-   * @param dtoPackage DTO パッケージ名
-   * @param returnAsDto false の場合は String 以外の変換を行わず rhs をそのまま返す
-   * @return 代入 RHS として使える式文字列
+   * @param valueType CORBA側の型名（配列型 "Foo[]" でも可）
+   * @param ctx コード生成コンテキスト
+   * @return 代入RHSとして使える式文字列
    */
-  static String corbaToDtoExpr(
-      String rhs, String valueType, String basePackage, String dtoPackage, boolean returnAsDto) {
+  static String corbaToDtoExpr(String rhs, String valueType, GenContext ctx) {
     // StringはCORBAの文字コード（ISO-8859-1として渡されるSJISバイト）をSJISとして再解釈する
     if ("String".equals(valueType)) {
-      return basePackage + ".mapper.StringMapper.encode(" + rhs + ")";
+      return ctx.basePackage() + ".mapper.StringMapper.encode(" + rhs + ")";
     }
-    if (!returnAsDto || isPrimitiveType(valueType) || "org.omg.CORBA.Any".equals(valueType)) {
+    if (!ctx.returnAsDto() || isPrimitiveType(valueType) || "org.omg.CORBA.Any".equals(valueType)) {
       return rhs;
     }
     boolean isArray = valueType.endsWith("[]");
@@ -272,17 +260,17 @@ final class CorbaTypeUtils {
           + rhs
           + ")"
           + ".map("
-          + basePackage
+          + ctx.basePackage()
           + ".mapper."
           + elemSimple
           + "Mapper::toDto)"
           + ".toArray("
-          + dtoPackage
+          + ctx.dtoPackage()
           + "."
           + elemSimple
           + "Dto[]::new)";
     }
-    return basePackage + ".mapper." + elemSimple + "Mapper.toDto(" + rhs + ")";
+    return ctx.basePackage() + ".mapper." + elemSimple + "Mapper.toDto(" + rhs + ")";
   }
 
   /**

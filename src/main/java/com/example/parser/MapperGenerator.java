@@ -4,7 +4,6 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.squareup.javapoet.*;
 import java.io.IOException;
-import java.nio.file.Path;
 import javax.lang.model.element.Modifier;
 
 /** CORBA⇔DTOのMapper自動生成クラス */
@@ -14,16 +13,15 @@ public class MapperGenerator {
    * 指定クラスからMapperクラスを生成する
    *
    * @param clazz 対象クラス
-   * @param outputDir 生成ファイルの出力先ディレクトリ
-   * @param basePackage 生成クラスのベースパッケージ
+   * @param ctx コード生成コンテキスト
    * @throws IOException ファイル出力エラー
    */
-  public static void generate(ClassOrInterfaceDeclaration clazz, Path outputDir, String basePackage)
+  public static void generate(ClassOrInterfaceDeclaration clazz, GenContext ctx)
       throws IOException {
     String name = clazz.getNameAsString();
     String dtoName = name + "Dto";
     String mapperName = name + "Mapper";
-    String dtoPackage = basePackage + ".dto";
+    String dtoPackage = ctx.dtoPackage();
     ClassName dtoClass = ClassName.get(dtoPackage, dtoName);
     String corbaPackage =
         clazz
@@ -50,8 +48,8 @@ public class MapperGenerator {
             .addParameter(dtoClass, "src")
             .addStatement("$T dst = new $T()", corbaClass, corbaClass);
 
-    ClassName anyMapperClass = ClassName.get(basePackage + ".mapper", "AnyMapper");
-    ClassName stringMapperClass = ClassName.get(basePackage + ".mapper", "StringMapper");
+    ClassName anyMapperClass = ClassName.get(ctx.basePackage() + ".mapper", "AnyMapper");
+    ClassName stringMapperClass = ClassName.get(ctx.basePackage() + ".mapper", "StringMapper");
 
     for (FieldDeclaration field : clazz.getFields()) {
       String type = field.getElementType().asString();
@@ -95,7 +93,7 @@ public class MapperGenerator {
             fromDtoBody.addStatement("dst.$N = src.$N", nameField, nameField);
           } else {
             // 独自型の配列: 各要素を対応するMapperで変換する
-            ClassName nestedMapperClass = ClassName.get(basePackage + ".mapper", simple + "Mapper");
+            ClassName nestedMapperClass = ClassName.get(ctx.basePackage() + ".mapper", simple + "Mapper");
             ClassName dtoElemClass = ClassName.get(dtoPackage, simple + "Dto");
 
             // 要素型のパッケージを含む構造体のimport文から逆引きする。
@@ -140,7 +138,7 @@ public class MapperGenerator {
                 corbaElemClass);
           }
         } else {
-          ClassName nestedMapperClass = ClassName.get(basePackage + ".mapper", simple + "Mapper");
+          ClassName nestedMapperClass = ClassName.get(ctx.basePackage() + ".mapper", simple + "Mapper");
           toDtoBody.addStatement(
               "dto.$N = $T.toDto($N.$N)", nameField, nestedMapperClass, "src", nameField);
           fromDtoBody.addStatement(
@@ -155,7 +153,7 @@ public class MapperGenerator {
     mapper.addMethod(toDtoBody.build());
     mapper.addMethod(fromDtoBody.build());
 
-    JavaFile.builder(basePackage + ".mapper", mapper.build()).build().writeTo(outputDir);
+    JavaFile.builder(ctx.basePackage() + ".mapper", mapper.build()).build().writeTo(ctx.javaDir());
   }
 
   /**

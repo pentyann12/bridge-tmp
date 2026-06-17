@@ -4,7 +4,6 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.squareup.javapoet.*;
 import java.io.IOException;
-import java.nio.file.Path;
 import javax.lang.model.element.Modifier;
 
 /**
@@ -19,14 +18,13 @@ public class DtoGenerator {
    * スタブクラスからDTOクラスを生成し、指定ディレクトリに出力する
    *
    * @param clazz スタブクラス定義
-   * @param outputDir 出力先ディレクトリ
-   * @param basePackage 生成クラスのベースパッケージ名
+   * @param ctx コード生成コンテキスト
    */
-  public static void generate(ClassOrInterfaceDeclaration clazz, Path outputDir, String basePackage)
+  public static void generate(ClassOrInterfaceDeclaration clazz, GenContext ctx)
       throws IOException {
     String className = clazz.getNameAsString();
     String dtoName = className + "Dto";
-    String dtoPackage = basePackage + ".dto";
+    String dtoPackage = ctx.dtoPackage();
 
     // DTO用のクラスを作成し、全てのフィールドをDTOにコピーする
     // このとき、フィールドの型はDTO用の型へ変換する
@@ -49,7 +47,7 @@ public class DtoGenerator {
     }
 
     JavaFile javaFile = JavaFile.builder(dtoPackage, typeBuilder.build()).build();
-    javaFile.writeTo(outputDir);
+    javaFile.writeTo(ctx.javaDir());
   }
 
   /**

@@ -2,7 +2,6 @@ package com.example.parser;
 
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
 /** CORBA Stringの文字コード変換Mapperを出力するユーティリティ */
@@ -14,10 +13,9 @@ final class StringMapperWriter {
    *
    * <p>CORBAサーバーがISO-8859-1として送ってくるSJISバイト列を正しい文字列に変換します。
    *
-   * @param mapperDir Mapper ディレクトリ
-   * @param basePkgName ベースパッケージ名
+   * @param ctx コード生成コンテキスト
    */
-  static void write(Path mapperDir, String basePkgName) throws IOException {
+  static void write(GenContext ctx) throws IOException {
     String content =
         """
         package %s.mapper;
@@ -37,9 +35,9 @@ final class StringMapperWriter {
           }
         }
         """
-            .formatted(basePkgName);
+            .formatted(ctx.basePackage());
     Files.writeString(
-        mapperDir.resolve("StringMapper.java"),
+        ctx.mapperDir().resolve("StringMapper.java"),
         content,
         StandardOpenOption.CREATE,
         StandardOpenOption.TRUNCATE_EXISTING);

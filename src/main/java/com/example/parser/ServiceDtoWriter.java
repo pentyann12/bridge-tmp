@@ -10,13 +10,21 @@ import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.stream.Collectors;
 import javax.lang.model.element.Modifier;
 
-/** サービスメソッド用RequestDto / ResponseDtoとapplication.ymlを出力するユーティリティ */
+/**
+ * サービスメソッドごとのDTO群とapplication.ymlを出力するユーティリティ
+ *
+ * 1つのサービスメソッドに対して以下の4クラスを生成します:
+ *
+ * - `XxxRequestDto` — in引数をフィールドに持つリクエストDTO
+ * - `XxxRpcRequest` — JSON-RPCリクエストのラッパー（`params: XxxRequestDto`）
+ * - `XxxRpcResult` — JSON-RPCレスポンスの`result`オブジェクト（`@JsonProperty("return") returnValue`フィールド＋out引数フィールド）
+ * - `XxxRpcResponse` — JSON-RPCレスポンスのラッパー（`result: XxxRpcResult`）
+ */
 final class ServiceDtoWriter {
   private ServiceDtoWriter() {}
 
@@ -28,12 +36,10 @@ final class ServiceDtoWriter {
    * params}の型は{@code XxxRequestDto}です。
    *
    * @param method サービスメソッドの宣言
-   * @param outputRoot Java ソースのルートディレクトリ
-   * @param basePkgName ベースパッケージ名
+   * @param ctx コード生成コンテキスト
    */
-  static void generateRequestDto(MethodDeclaration method, Path outputRoot, String basePkgName)
-      throws IOException {
-    String dtoPkgName = basePkgName + ".dto";
+  static void generateRequestDto(MethodDeclaration method, GenContext ctx) throws IOException {
+    String dtoPkgName = ctx.dtoPackage();
     String capitalizedName = CorbaTypeUtils.capitalize(method.getNameAsString());
 
     // XxxRequestDto: 実際の引数フィールドを持つDTO
@@ -44,7 +50,7 @@ final class ServiceDtoWriter {
         // out引数はリクエストボディから除外する
         continue;
       }
-      String fieldType = CorbaTypeUtils.mapToDtoType(basePkgName, param.getType().asString());
+      String fieldType = CorbaTypeUtils.mapToDtoType(ctx.basePackage(), param.getType().asString());
       typeBuilder.addField(
           FieldSpec.builder(
                   CorbaTypeUtils.convToTypeName(fieldType, dtoPkgName),
@@ -52,7 +58,7 @@ final class ServiceDtoWriter {
                   Modifier.PUBLIC)
               .build());
     }
-    JavaFile.builder(dtoPkgName, typeBuilder.build()).build().writeTo(outputRoot);
+    JavaFile.builder(dtoPkgName, typeBuilder.build()).build().writeTo(ctx.javaDir());
 
     // XxxRpcRequest: JSON-RPCラッパー（paramsフィールドでXxxRequestDtoを保持）
     ClassName requestDtoClass = ClassName.get(dtoPkgName, capitalizedName + "RequestDto");
@@ -66,7 +72,7 @@ final class ServiceDtoWriter {
             .addField(FieldSpec.builder(TypeName.INT, "id", Modifier.PUBLIC).build())
             .addField(FieldSpec.builder(requestDtoClass, "params", Modifier.PUBLIC).build())
             .build();
-    JavaFile.builder(dtoPkgName, rpcWrapper).build().writeTo(outputRoot);
+    JavaFile.builder(dtoPkgName, rpcWrapper).build().writeTo(ctx.javaDir());
   }
 
   /**
@@ -80,26 +86,13 @@ final class ServiceDtoWriter {
    * </ul>
    *
    * @param method サービスメソッドの宣言
-   * @param outputRoot Java ソースのルートディレクトリ
-   * @param basePkgName ベースパッケージ名
-   * @param returnAsDto true の場合、複雑な型を DTO 型に変換する
-   * @param servicePackage サービスが属するパッケージ（FQN 解決のフォールバック用）
-   * @param stubRoot Holder の value 型解決でスタブファイルを参照するために使用
+   * @param ctx コード生成コンテキスト
    */
-  static void generateRpcResponse(
-      MethodDeclaration method,
-      Path outputRoot,
-      String basePkgName,
-      boolean returnAsDto,
-      String servicePackage,
-      Path stubRoot)
-      throws IOException {
-    String dtoPkgName = basePkgName + ".dto";
+  static void generateRpcResponse(MethodDeclaration method, GenContext ctx) throws IOException {
+    String dtoPkgName = ctx.dtoPackage();
     String capitalizedName = CorbaTypeUtils.capitalize(method.getNameAsString());
 
-    String returnTypeName =
-        CorbaTypeUtils.resolveRpcReturnType(
-            method, basePkgName, dtoPkgName, servicePackage, returnAsDto);
+    String returnTypeName = CorbaTypeUtils.resolveRpcReturnType(method, ctx);
 
     // XxxRpcResult: result.returnの型を@JsonProperty("return")で定義
     AnnotationSpec jsonProperty =
@@ -121,14 +114,13 @@ final class ServiceDtoWriter {
     for (Parameter param : method.getParameters()) {
       String paramType = param.getType().asString();
       if (!CorbaTypeUtils.isHolderType(paramType)) continue;
-      String valueType =
-          CorbaTypeUtils.resolveHolderValueType(paramType, method, servicePackage, stubRoot);
+      String valueType = CorbaTypeUtils.resolveHolderValueType(paramType, method, ctx);
       String fieldType =
-          returnAsDto
-              ? CorbaTypeUtils.mapToDtoType(basePkgName, valueType)
+          ctx.returnAsDto()
+              ? CorbaTypeUtils.mapToDtoType(ctx.basePackage(), valueType)
               : (valueType.contains(".")
                   ? valueType
-                  : CorbaTypeUtils.resolveTypeFQN(valueType, method, servicePackage));
+                  : CorbaTypeUtils.resolveTypeFQN(valueType, method, ctx.servicePackage()));
       rpcResultBuilder.addField(
           FieldSpec.builder(
                   CorbaTypeUtils.convToTypeName(fieldType, dtoPkgName),
@@ -137,7 +129,7 @@ final class ServiceDtoWriter {
               .build());
     }
 
-    JavaFile.builder(dtoPkgName, rpcResultBuilder.build()).build().writeTo(outputRoot);
+    JavaFile.builder(dtoPkgName, rpcResultBuilder.build()).build().writeTo(ctx.javaDir());
 
     // XxxRpcResponse: JSON-RPCラッパー
     ClassName rpcResultClass = ClassName.get(dtoPkgName, capitalizedName + "RpcResult");
@@ -152,16 +144,16 @@ final class ServiceDtoWriter {
                 FieldSpec.builder(TypeName.INT, "id", Modifier.PUBLIC).initializer("1").build())
             .addField(FieldSpec.builder(rpcResultClass, "result", Modifier.PUBLIC).build())
             .build();
-    JavaFile.builder(dtoPkgName, rpcResponse).build().writeTo(outputRoot);
+    JavaFile.builder(dtoPkgName, rpcResponse).build().writeTo(ctx.javaDir());
   }
 
   /**
    * application.ymlを出力 サービスが複数の場合は全サービス分のIOR設定を出力
    *
-   * @param outputDir プロジェクト出力先ディレクトリ
+   * @param ctx コード生成コンテキスト
    * @param serviceNames サービス名の一覧
    */
-  static void writeApplicationProperties(Path outputDir, List<String> serviceNames)
+  static void writeApplicationProperties(GenContext ctx, List<String> serviceNames)
       throws IOException {
     String content =
         "corba:\n"
@@ -169,7 +161,7 @@ final class ServiceDtoWriter {
                 .map(n -> "  %s:\n    ior:\n".formatted(n))
                 .collect(Collectors.joining());
     Files.writeString(
-        outputDir.resolve("src/main/resources/application.yml"),
+        ctx.resourcesDir().resolve("application.yml"),
         content,
         StandardOpenOption.CREATE,
         StandardOpenOption.TRUNCATE_EXISTING);

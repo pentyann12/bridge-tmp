@@ -3,7 +3,6 @@ package com.example.parser;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,7 +11,7 @@ import java.util.stream.IntStream;
 
 /** CORBA.Any <-> AnyValueの相互変換コード生成ユーティリティ */
 final class AnyTypeWriter {
-  // 1つのinitStructHandlersN()に詰める最大エントリ数
+  // 1つのinitStructHandlersNに詰める最大エントリ数
   private static final int STRUCT_CHUNK = 50;
   
   /** constructor. */
@@ -21,10 +20,9 @@ final class AnyTypeWriter {
   /**
    * AnyValueクラスを出力する
    *
-   * @param dtoDir 出力先ディレクトリ
-   * @param basePkgName ベースパッケージ名
+   * @param ctx コード生成コンテキスト
    */
-  static void writeAnyValueDto(Path dtoDir, String basePkgName) throws IOException {
+  static void writeAnyValueDto(GenContext ctx) throws IOException {
     String content =
         """
         package %s.dto;
@@ -39,9 +37,9 @@ final class AnyTypeWriter {
           }
         }
         """
-            .formatted(basePkgName);
+            .formatted(ctx.basePackage());
     Files.writeString(
-        dtoDir.resolve("AnyValue.java"),
+        ctx.dtoDir().resolve("AnyValue.java"),
         content,
         StandardOpenOption.CREATE,
         StandardOpenOption.TRUNCATE_EXISTING);
@@ -51,20 +49,18 @@ final class AnyTypeWriter {
    * Javaパッケージ名から`idlj -pkgPrefix`で付与されたプレフィックスを除き、本来のIDL名前空間を返す
    *
    * @param classPkg Javaパッケージ名（例: "com.prefix.corba.Foo"）
-   * @param idlPackagePrefix `idlj -pkgPrefix`で付与されたパッケージプレフィックス（例: "com.prefix"）
+   * @param ctx コード生成コンテキスト（`idlPackagePrefix`を参照）
    * @return プレフィックスを除いたIDL名前空間（例: "corba"）。プレフィックスが空またはマッチしない場合はclassPkgをそのまま返す
    */
-  private static String toIdlPkg(String classPkg, String idlPackagePrefix) {
-    if (idlPackagePrefix.isEmpty()) return classPkg;
-    if (classPkg.equals(idlPackagePrefix)) return "";
-    if (classPkg.startsWith(idlPackagePrefix + ".")){
-      return classPkg.substring(idlPackagePrefix.length() + 1);
-    }
+  private static String toIdlPkg(String classPkg, GenContext ctx) {
+    String prefix = ctx.idlPackagePrefix();
+    if (prefix.isEmpty()) return classPkg;
+    if (classPkg.equals(prefix)) return "";
+    if (classPkg.startsWith(prefix + ".")) return classPkg.substring(prefix.length() + 1);
     return classPkg;
   }
 
   /**
-   * TODO: 整理
    * CORBA.Any⇔AnyValue相互変換Mapperを出力する
    *
    * <p>プリミティブ型の分岐は{@code KIND_HANDLERS}（{@code Map<Integer, Function<Any,AnyValue>>}）で処理し、 {@code
@@ -74,20 +70,12 @@ final class AnyTypeWriter {
    * TypeCode IDから直接Mapperを引きます。エントリ数が多くてもstatic initializerの65535バイト制限に 引っかからないよう、{@code
    * initStructHandlersN()}メソッドへチャンク分割して登録します。
    *
-   * @param mapperDir Mapperディレクトリ
-   * @param basePkgName ベースパッケージ名
+   * @param ctx コード生成コンテキスト（`ctx.idlPackagePrefix()`・`ctx.repoIdPrefix()`を含む）
    * @param structClasses IDLスタブから収集した構造体クラス一覧
-   * @param idlPackagePrefix `idlj -pkgPrefix`で付与されたパッケージプレフィックス（TypeCode IDから除去するために使用）
-   * @param repoIdPrefix IDLの`#pragma prefix`で設定されたリポジトリIDプレフィックス（TypeCode IDの先頭に付与）
    */
-  static void writeAnyMapper(
-      Path mapperDir,
-      String basePkgName,
-      List<ClassOrInterfaceDeclaration> structClasses,
-      String idlPackagePrefix,
-      String repoIdPrefix)
+  static void writeAnyMapper(GenContext ctx, List<ClassOrInterfaceDeclaration> structClasses)
       throws IOException {
-    String pkg = basePkgName + ".mapper";
+    String pkg = ctx.basePackage() + ".mapper";
 
     // 構造体ごとのMap.putエントリ文字列を生成
     List<String> entries =
@@ -101,10 +89,10 @@ final class AnyTypeWriter {
                           .flatMap(cu -> cu.getPackageDeclaration().map(pd -> pd.getNameAsString()))
                           .orElse("");
                   // idlj -pkgPrefixで付与されたJavaパッケージプレフィックスを除いたIDL名前空間
-                  String idlPkg = toIdlPkg(classPkg, idlPackagePrefix);
+                  String idlPkg = toIdlPkg(classPkg, ctx);
                   // #pragma prefixとIDL名前空間を組み合わせてTypeCode IDを構築
                   String repoPath =
-                      (repoIdPrefix.isEmpty() ? "" : repoIdPrefix + "/")
+                      (ctx.repoIdPrefix().isEmpty() ? "" : ctx.repoIdPrefix() + "/")
                           + (idlPkg.isEmpty() ? "" : idlPkg.replace('.', '/') + "/")
                           + className;
                   String repoId = "IDL:" + repoPath + ":1.0";
@@ -114,7 +102,7 @@ final class AnyTypeWriter {
                       classPkg.isEmpty()
                           ? className + "Helper"
                           : classPkg + "." + className + "Helper";
-                  String mapperFqn = basePkgName + ".mapper." + className + "Mapper";
+                  String mapperFqn = ctx.basePackage() + ".mapper." + className + "Mapper";
                   return "    m.put(\"%s\", any -> new AnyValue(\"%s\", %s.toDto(%s.extract(any))));\n"
                       .formatted(repoId, typeName, mapperFqn, helperFqn);
                 })
@@ -228,11 +216,11 @@ final class AnyTypeWriter {
           }
         }
         """
-            .formatted(pkg, basePkgName)
+            .formatted(pkg, ctx.basePackage())
             .replace("  //@@STRUCT_HANDLERS@@\n", structHandlersBlock);
 
     Files.writeString(
-        mapperDir.resolve("AnyMapper.java"),
+        ctx.mapperDir().resolve("AnyMapper.java"),
         content,
         StandardOpenOption.CREATE,
         StandardOpenOption.TRUNCATE_EXISTING);
