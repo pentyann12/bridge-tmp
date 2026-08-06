@@ -177,9 +177,10 @@ final class AnyTypeWriter {
           //@@STRUCT_HANDLERS@@
 
           public static Any toAny(AnyValue dto) {
-            if (dto == null) return null;
             Any any = ORB.init(new String[0], null).create_any();
+            if (dto == null) return any;
             if (dto.type == null) return any;
+            if (dto.type == "null") return any;
             switch (dto.type) {
               case "boolean": any.insert_boolean((Boolean) dto.value); break;
               case "short": any.insert_short(((Number) dto.value).shortValue()); break;
