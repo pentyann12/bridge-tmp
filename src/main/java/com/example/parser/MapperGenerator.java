@@ -86,7 +86,12 @@ public class MapperGenerator {
                 nameField,
                 nameField,
                 stringMapperClass);
-            fromDtoBody.addStatement("dst.$N = src.$N", nameField, nameField);
+            fromDtoBody.addStatement(
+                "dst.$N = src.$N == null ? null : java.util.Arrays.stream(src.$N).map($T::decode).toArray(String[]::new)",
+                nameField,
+                nameField,
+                nameField,
+                stringMapperClass);
           } else if (isPrimitive) {
             // int[]等のプリミティブ配列、または多次元String[][]はそのままコピー
             toDtoBody.addStatement("dto.$N = src.$N", nameField, nameField);

@@ -48,9 +48,9 @@ final class AnyTypeWriter {
   /**
    * Javaパッケージ名から`idlj -pkgPrefix`で付与されたプレフィックスを除き、本来のIDL名前空間を返す
    *
-   * @param classPkg Javaパッケージ名（例: "com.prefix.corba.Foo"）
-   * @param ctx コード生成コンテキスト（`idlPackagePrefix`を参照）
-   * @return プレフィックスを除いたIDL名前空間（例: "corba"）。プレフィックスが空またはマッチしない場合はclassPkgをそのまま返す
+   * @param classPkg Javaパッケージ名
+   * @param ctx コード生成コンテキスト
+   * @return プレフィックスを除いたIDL名前空間
    */
   private static String toIdlPkg(String classPkg, GenContext ctx) {
     String prefix = ctx.idlPackagePrefix();
@@ -61,16 +61,9 @@ final class AnyTypeWriter {
   }
 
   /**
-   * CORBA.Any⇔AnyValue相互変換Mapperを出力する
+   * CORBA.Any <-> AnyValue相互変換Mapperを出力する
    *
-   * プリミティブ型の分岐は`KIND_HANDLERS`（`Map<Integer, Function<Any,AnyValue>>`）で処理し、
-   * `toAnyValue`自体のバイト数を最小化します。
-   *
-   * `tk_struct`については`STRUCT_HANDLERS`（`Map<String, Function<Any,AnyValue>>`）で
-   * TypeCode IDから直接Mapperを引きます。エントリ数が多くてもstatic initializerの65535バイト制限に
-   * 引っかからないよう、`initStructHandlersN()`メソッドへチャンク分割して登録します。
-   *
-   * @param ctx コード生成コンテキスト（`ctx.idlPackagePrefix()`・`ctx.repoIdPrefix()`を含む）
+   * @param ctx コード生成コンテキスト
    * @param structClasses IDLスタブから収集した構造体クラス一覧
    */
   static void writeAnyMapper(GenContext ctx, List<ClassOrInterfaceDeclaration> structClasses)
@@ -88,7 +81,6 @@ final class AnyTypeWriter {
                           .findCompilationUnit()
                           .flatMap(cu -> cu.getPackageDeclaration().map(pd -> pd.getNameAsString()))
                           .orElse("");
-                  // idlj -pkgPrefixで付与されたJavaパッケージプレフィックスを除いたIDL名前空間
                   String idlPkg = toIdlPkg(classPkg, ctx);
                   // #pragma prefixとIDL名前空間を組み合わせてTypeCode IDを構築
                   String repoPath =
@@ -96,7 +88,7 @@ final class AnyTypeWriter {
                           + (idlPkg.isEmpty() ? "" : idlPkg.replace('.', '/') + "/")
                           + className;
                   String repoId = "IDL:" + repoPath + ":1.0";
-                  // AnyValue.type: IDL名前空間付き型名（例: "corba.MyStruct"）
+                  // AnyValue.type: IDL名前空間付き型名
                   String typeName = idlPkg.isEmpty() ? className : idlPkg + "." + className;
                   String helperFqn =
                       classPkg.isEmpty()
@@ -159,20 +151,20 @@ final class AnyTypeWriter {
           private static final java.util.Map<Integer, java.util.function.Function<Any, AnyValue>> KIND_HANDLERS;
           static {
             java.util.Map<Integer, java.util.function.Function<Any, AnyValue>> m = new java.util.HashMap<>();
-            m.put(TCKind._tk_boolean,   a -> new AnyValue("boolean", a.extract_boolean()));
-            m.put(TCKind._tk_short,     a -> new AnyValue("short",   a.extract_short()));
-            m.put(TCKind._tk_ushort,    a -> new AnyValue("short",   a.extract_ushort()));
-            m.put(TCKind._tk_long,      a -> new AnyValue("int",     a.extract_long()));
-            m.put(TCKind._tk_ulong,     a -> new AnyValue("int",     a.extract_ulong()));
-            m.put(TCKind._tk_longlong,  a -> new AnyValue("long",    a.extract_longlong()));
-            m.put(TCKind._tk_ulonglong, a -> new AnyValue("long",    a.extract_ulonglong()));
-            m.put(TCKind._tk_float,     a -> new AnyValue("float",   a.extract_float()));
-            m.put(TCKind._tk_double,    a -> new AnyValue("double",  a.extract_double()));
-            m.put(TCKind._tk_char,      a -> new AnyValue("char",    a.extract_char()));
-            m.put(TCKind._tk_wchar,     a -> new AnyValue("char",    a.extract_wchar()));
-            m.put(TCKind._tk_octet,     a -> new AnyValue("byte",    a.extract_octet()));
-            m.put(TCKind._tk_string,    a -> new AnyValue("string",  a.extract_string()));
-            m.put(TCKind._tk_any,       a -> new AnyValue("any",     AnyMapper.toAnyValue(a.extract_any())));
+            m.put(TCKind._tk_boolean, a -> new AnyValue("boolean", a.extract_boolean()));
+            m.put(TCKind._tk_short, a -> new AnyValue("short", a.extract_short()));
+            m.put(TCKind._tk_ushort, a -> new AnyValue("short", a.extract_ushort()));
+            m.put(TCKind._tk_long, a -> new AnyValue("int", a.extract_long()));
+            m.put(TCKind._tk_ulong, a -> new AnyValue("int", a.extract_ulong()));
+            m.put(TCKind._tk_longlong, a -> new AnyValue("long", a.extract_longlong()));
+            m.put(TCKind._tk_ulonglong, a -> new AnyValue("long", a.extract_ulonglong()));
+            m.put(TCKind._tk_float, a -> new AnyValue("float", a.extract_float()));
+            m.put(TCKind._tk_double, a -> new AnyValue("double", a.extract_double()));
+            m.put(TCKind._tk_char, a -> new AnyValue("char", a.extract_char()));
+            m.put(TCKind._tk_wchar, a -> new AnyValue("char", a.extract_wchar()));
+            m.put(TCKind._tk_octet, a -> new AnyValue("byte", a.extract_octet()));
+            m.put(TCKind._tk_string, a -> new AnyValue("string", a.extract_string()));
+            m.put(TCKind._tk_any, a -> new AnyValue("any", AnyMapper.toAnyValue(a.extract_any())));
             KIND_HANDLERS = java.util.Collections.unmodifiableMap(m);
           }
 
@@ -184,13 +176,13 @@ final class AnyTypeWriter {
             if (dto.type == null) return any;
             switch (dto.type) {
               case "boolean": any.insert_boolean((Boolean) dto.value); break;
-              case "short":   any.insert_short(((Number) dto.value).shortValue()); break;
-              case "long":    any.insert_long(((Number) dto.value).intValue()); break;
-              case "float":   any.insert_float(((Number) dto.value).floatValue()); break;
-              case "double":  any.insert_double(((Number) dto.value).doubleValue()); break;
-              case "string":  any.insert_string(String.valueOf(dto.value)); break;
-              case "any":     any.insert_any(toAny((AnyValue) dto.value)); break;
-              default:        any.insert_Object((Object) dto.value); break;
+              case "short": any.insert_short(((Number) dto.value).shortValue()); break;
+              case "long": any.insert_long(((Number) dto.value).intValue()); break;
+              case "float": any.insert_float(((Number) dto.value).floatValue()); break;
+              case "double": any.insert_double(((Number) dto.value).doubleValue()); break;
+              case "string": any.insert_string(String.valueOf(dto.value)); break;
+              case "any": any.insert_any(toAny((AnyValue) dto.value)); break;
+              default: any.insert_Object((Object) dto.value); break;
             }
             return any;
           }

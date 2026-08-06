@@ -226,6 +226,10 @@ final class ControllerMethodBuilder {
     String fieldRef = handlerName + "." + param.getNameAsString();
 
     if (CorbaTypeUtils.isPrimitiveType(paramType)) {
+      if ("String".equals(paramType)) {
+        return "        %s %s = %s.mapper.StringMapper.decode(%s);\n"
+            .formatted(paramType, argName, ctx.basePackage(), fieldRef);
+      }
       return "        %s %s = %s;\n".formatted(paramType, argName, fieldRef);
     } else if ("org.omg.CORBA.Any".equals(paramType)) {
       return "        org.omg.CORBA.Any %s = %s.mapper.AnyMapper.toAny(%s);\n"
@@ -235,6 +239,10 @@ final class ControllerMethodBuilder {
       String fqnParam = CorbaTypeUtils.resolveTypeFQN(paramType, method, ctx.servicePackage());
       String elemFqn =
           fqnParam.endsWith("[]") ? fqnParam.substring(0, fqnParam.length() - 2) : fqnParam;
+      if ("String".equals(elemSimple)) {
+        return "        %s %s = %s == null ? null : java.util.Arrays.stream(%s).map(%s.mapper.StringMapper::decode).toArray(String[]::new);\n"
+            .formatted(fqnParam, argName, fieldRef, fieldRef, ctx.basePackage());
+      }
       return "        %s %s = %s == null ? null : java.util.Arrays.stream(%s).map(%s.mapper.%sMapper::fromDto).toArray(%s[]::new);\n"
           .formatted(fqnParam, argName, fieldRef, fieldRef, ctx.basePackage(), elemSimple, elemFqn);
     } else {
