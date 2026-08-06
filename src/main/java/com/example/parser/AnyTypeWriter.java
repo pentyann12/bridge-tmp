@@ -151,26 +151,39 @@ final class AnyTypeWriter {
           private static final java.util.Map<Integer, java.util.function.Function<Any, AnyValue>> KIND_HANDLERS;
           static {
             java.util.Map<Integer, java.util.function.Function<Any, AnyValue>> m = new java.util.HashMap<>();
-            m.put(TCKind._tk_boolean, a -> new AnyValue("boolean", a.extract_boolean()));
+            m.put(TCKind._tk_null, a -> null);
+            m.put(TCKind._tk_void, a -> null);
             m.put(TCKind._tk_short, a -> new AnyValue("short", a.extract_short()));
-            m.put(TCKind._tk_ushort, a -> new AnyValue("ushort", a.extract_ushort()));
             m.put(TCKind._tk_long, a -> new AnyValue("long", a.extract_long()));
+            m.put(TCKind._tk_ushort, a -> new AnyValue("ushort", a.extract_ushort()));
             m.put(TCKind._tk_ulong, a -> new AnyValue("ulong", a.extract_ulong()));
-            m.put(TCKind._tk_longlong, a -> new AnyValue("longlong", a.extract_longlong()));
-            m.put(TCKind._tk_ulonglong, a -> new AnyValue("ulonglong", a.extract_ulonglong()));
             m.put(TCKind._tk_float, a -> new AnyValue("float", a.extract_float()));
             m.put(TCKind._tk_double, a -> new AnyValue("double", a.extract_double()));
-            m.put(TCKind._tk_longdouble, a -> new AnyValue("longdouble", a.extract_longdouble()));
+            m.put(TCKind._tk_boolean, a -> new AnyValue("boolean", a.extract_boolean()));
             m.put(TCKind._tk_char, a -> new AnyValue("char", a.extract_char()));
-            m.put(TCKind._tk_wchar, a -> new AnyValue("wchar", a.extract_wchar()));
             m.put(TCKind._tk_octet, a -> new AnyValue("octet", a.extract_octet()));
-            m.put(TCKind._tk_string, a -> new AnyValue("string", a.extract_string()));
-            m.put(TCKind._tk_wstring, a -> new AnyValue("wstring", a.extract_wstring()));
             m.put(TCKind._tk_any, a -> new AnyValue("any", AnyMapper.toAnyValue(a.extract_any())));
             m.put(TCKind._tk_TypeCode, a -> new AnyValue("TypeCode", a.extract_TypeCode()));
-            m.put(TCKind._tk_Principal, a -> new AnyValue("Principal", a.extract_Principal()));
+            m.put(TCKind._tk_Principal, a -> new AnyValue("Principal", a.extract_Object()));
             m.put(TCKind._tk_objref, a -> new AnyValue("objref", a.extract_Object()));
+            m.put(TCKind._tk_struct, a -> extractStruct(a));
+            m.put(TCKind._tk_union, a -> extractUnion(a));
+            m.put(TCKind._tk_enum, a -> extractEnum(a));
+            m.put(TCKind._tk_string, a -> extractString(a));
+            m.put(TCKind._tk_sequence, a -> extractSequence(a));
+            m.put(TCKind._tk_array, a -> extractArray(a));
+            m.put(TCKind._tk_alias, a -> extractAlias(a));
+            m.put(TCKind._tk_except, a -> extractException(a));
+            m.put(TCKind._tk_longlong, a -> new AnyValue("longlong", a.extract_longlong()));
+            m.put(TCKind._tk_ulonglong, a -> new AnyValue("ulonglong", a.extract_ulonglong()));
+            m.put(TCKind._tk_longdouble, a -> new AnyValue("longdouble", a.extract_Object()));
+            m.put(TCKind._tk_wchar, a -> extractWChar(a));
+            m.put(TCKind._tk_wstring, a -> extractWString(a));
             m.put(TCKind._tk_fixed, a -> new AnyValue("fixed", a.extract_fixed()));
+            m.put(TCKind._tk_value, a -> extractValue(a));
+            m.put(TCKind._tk_value_box, a -> extractValueBox(a));
+            m.put(TCKind._tk_native, a -> extractNative(a));
+            m.put(TCKind._tk_abstract_interface, a -> extractAbstractInterface(a));
             KIND_HANDLERS = java.util.Collections.unmodifiableMap(m);
           }
 
@@ -191,14 +204,12 @@ final class AnyTypeWriter {
               case "ulonglong": any.insert_ulonglong(((Number) dto.value).longValue()); break;
               case "float": any.insert_float(((Number) dto.value).floatValue()); break;
               case "double": any.insert_double(((Number) dto.value).doubleValue()); break;
-              case "longdouble": any.insert_longdouble(new java.math.BigDecimal(dto.value.toString())); break;
               case "char": any.insert_char(String.valueOf(dto.value).charAt(0)); break;
               case "wchar": any.insert_wchar(String.valueOf(dto.value).charAt(0)); break;
               case "octet": any.insert_octet(((Number) dto.value).byteValue()); break;
               case "string": any.insert_string(String.valueOf(dto.value)); break;
               case "wstring": any.insert_wstring(String.valueOf(dto.value)); break;
               case "TypeCode": any.insert_TypeCode((org.omg.CORBA.TypeCode) dto.value); break;
-              case "Principal": any.insert_Principal((org.omg.CORBA.Principal) dto.value); break;
               case "any": any.insert_any(toAny((AnyValue) dto.value)); break;
               case "objref": case "union": case "enum": case "sequence": case "array": 
               case "alias": case "except": case "fixed": case "value": case "value_box": 
@@ -212,20 +223,11 @@ final class AnyTypeWriter {
           public static AnyValue toAnyValue(Any any) {
             if (any == null) return null;
             TCKind kind = any.type().kind();
-            if (kind.equals(TCKind.tk_null) || kind.equals(TCKind.tk_void)) return null;
+            if (kind == null || kind.value() == TCKind._tk_null || kind.value() == TCKind._tk_void) {
+              return null;
+            }
             java.util.function.Function<Any, AnyValue> h = KIND_HANDLERS.get(kind.value());
             if (h != null) return h.apply(any);
-            if (kind.equals(TCKind.tk_struct)) return extractStruct(any);
-            if (kind.equals(TCKind.tk_union)) return extractUnion(any);
-            if (kind.equals(TCKind.tk_enum)) return extractEnum(any);
-            if (kind.equals(TCKind.tk_sequence)) return extractSequence(any);
-            if (kind.equals(TCKind.tk_array)) return extractArray(any);
-            if (kind.equals(TCKind.tk_alias)) return extractAlias(any);
-            if (kind.equals(TCKind.tk_except)) return extractException(any);
-            if (kind.equals(TCKind.tk_value)) return extractValue(any);
-            if (kind.equals(TCKind.tk_value_box)) return extractValueBox(any);
-            if (kind.equals(TCKind.tk_native)) return extractNative(any);
-            if (kind.equals(TCKind.tk_abstract_interface)) return extractAbstractInterface(any);
             return new AnyValue("object", any.extract_Object());
           }
 
@@ -244,6 +246,30 @@ final class AnyTypeWriter {
               return new AnyValue("union", any.extract_Object());
             } catch (Exception e) {
               return new AnyValue("union", null);
+            }
+          }
+
+          private static AnyValue extractString(Any any) {
+            try {
+              return new AnyValue("string", any.extract_string());
+            } catch (Exception e) {
+              return new AnyValue("string", null);
+            }
+          }
+
+          private static AnyValue extractWChar(Any any) {
+            try {
+              return new AnyValue("wchar", any.extract_wchar());
+            } catch (Exception e) {
+              return new AnyValue("wchar", null);
+            }
+          }
+
+          private static AnyValue extractWString(Any any) {
+            try {
+              return new AnyValue("wstring", any.extract_wstring());
+            } catch (Exception e) {
+              return new AnyValue("wstring", null);
             }
           }
 

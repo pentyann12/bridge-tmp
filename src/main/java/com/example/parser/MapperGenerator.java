@@ -71,10 +71,12 @@ public class MapperGenerator {
           if ("String".equals(simple)) {
             toDtoBody.addStatement(
                 "dto.$N = $T.encode($N.$N)", nameField, stringMapperClass, "src", nameField);
+            fromDtoBody.addStatement(
+                "dst.$N = $T.decode(src.$N)", nameField, stringMapperClass, nameField);
           } else {
             toDtoBody.addStatement("dto.$N = $N.$N", nameField, "src", nameField);
+            fromDtoBody.addStatement("dst.$N = src.$N", nameField, nameField);
           }
-          fromDtoBody.addStatement("dst.$N = src.$N", nameField, nameField);
         } else if (isArray) {
           if ("String[]".equals(v.getType().asString())) {
             // 1次元String[]の各要素をStringMapper.encode()でエンコードする
