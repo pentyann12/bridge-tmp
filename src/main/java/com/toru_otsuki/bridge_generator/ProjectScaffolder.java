@@ -100,6 +100,9 @@ final class ProjectScaffolder {
         public class ServletInitializer extends SpringBootServletInitializer {
           @Override
           protected SpringApplicationBuilder configure(SpringApplicationBuilder application) {
+            System.setProperty(
+              "org.glassfish.gmbal.no.multipleUpperBoundsException",
+              "true");
             return application.sources(Application.class);
           }
         }
