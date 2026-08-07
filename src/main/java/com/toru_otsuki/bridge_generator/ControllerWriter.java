@@ -1,4 +1,4 @@
-package com.example.parser;
+package com.toru_otsuki.bridge_generator;
 
 import com.github.javaparser.ast.body.MethodDeclaration;
 import java.io.IOException;
@@ -20,10 +20,7 @@ final class ControllerWriter {
    * @param ctx コード生成コンテキスト
    */
   static void write(
-      String serviceName,
-      List<MethodDeclaration> methods,
-      String clientClassName,
-      GenContext ctx)
+      String serviceName, List<MethodDeclaration> methods, String clientClassName, GenContext ctx)
       throws IOException {
 
     String controllerName = serviceName + "Controller";

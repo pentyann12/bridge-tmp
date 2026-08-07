@@ -1,4 +1,4 @@
-package com.example.parser;
+package com.toru_otsuki.bridge_generator;
 
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import java.io.IOException;
@@ -13,7 +13,7 @@ import java.util.stream.IntStream;
 final class AnyTypeWriter {
   // 1つのinitStructHandlersNに詰める最大エントリ数
   private static final int STRUCT_CHUNK = 50;
-  
+
   /** constructor. */
   private AnyTypeWriter() {}
 
@@ -211,9 +211,9 @@ final class AnyTypeWriter {
               case "wstring": any.insert_wstring(String.valueOf(dto.value)); break;
               case "TypeCode": any.insert_TypeCode((org.omg.CORBA.TypeCode) dto.value); break;
               case "any": any.insert_any(toAny((AnyValue) dto.value)); break;
-              case "objref": case "union": case "enum": case "sequence": case "array": 
-              case "alias": case "except": case "fixed": case "value": case "value_box": 
-              case "native": case "abstract_interface": 
+              case "objref": case "union": case "enum": case "sequence": case "array":
+              case "alias": case "except": case "fixed": case "value": case "value_box":
+              case "native": case "abstract_interface":
                 any.insert_Object((Object) dto.value); break;
               default: any.insert_Object((Object) dto.value); break;
             }

@@ -1,4 +1,4 @@
-package com.example.parser;
+package com.toru_otsuki.bridge_generator;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -12,7 +12,7 @@ final class StringMapperWriter {
   /**
    * StringMapperクラスを出力する
    *
-   * CORBAサーバーがISO-8859-1として送ってくるSJISバイト列を正しい文字列に変換します。
+   * <p>CORBAサーバーがISO-8859-1として送ってくるSJISバイト列を正しい文字列に変換します。
    *
    * @param ctx コード生成コンテキスト
    */
@@ -50,9 +50,6 @@ final class StringMapperWriter {
         """
             .formatted(ctx.basePackage());
     Files.writeString(
-        target,
-        content,
-        StandardOpenOption.CREATE,
-        StandardOpenOption.TRUNCATE_EXISTING);
+        target, content, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
   }
 }

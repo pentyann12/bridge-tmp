@@ -1,15 +1,15 @@
-package com.example.parser;
+package com.toru_otsuki.bridge_generator;
 
 import java.nio.file.Path;
 
 /**
  * サービス単位のコード生成に必要な設定と出力先ディレクトリをまとめたコンテキスト
  *
- * `SpringBootProjectGenerator.generateService`で生成され、下流の全ライター/ビルダーに渡される。
+ * <p>`SpringBootProjectGenerator.generateService`で生成され、下流の全ライター/ビルダーに渡される。
  *
- * - `basePackage` / `servicePackage` / `returnAsDto`: コード生成設定
- * - `idlPackagePrefix` / `repoIdPrefix`: CLIから受け取るIDL関連設定
- * - `javaDir` / `controllerDir` / `corbaDir` / `stubRoot`: 出力先ディレクトリ
+ * <p>- `basePackage` / `servicePackage` / `returnAsDto`: コード生成設定 - `idlPackagePrefix` /
+ * `repoIdPrefix`: CLIから受け取るIDL関連設定 - `javaDir` / `controllerDir` / `corbaDir` / `stubRoot`:
+ * 出力先ディレクトリ
  */
 record GenContext(
     String basePackage,
@@ -51,7 +51,14 @@ record GenContext(
    */
   GenContext withService(String servicePackage, boolean returnAsDto) {
     return new GenContext(
-        basePackage, servicePackage, returnAsDto, idlPackagePrefix, repoIdPrefix,
-        javaDir, controllerDir, corbaDir, stubRoot);
+        basePackage,
+        servicePackage,
+        returnAsDto,
+        idlPackagePrefix,
+        repoIdPrefix,
+        javaDir,
+        controllerDir,
+        corbaDir,
+        stubRoot);
   }
 }

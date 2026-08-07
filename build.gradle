@@ -4,8 +4,8 @@ plugins {
 	id 'com.diffplug.spotless' version '8.4.0'
 }
 
-group = 'com.example'
-version = '0.0.1-SNAPSHOT'
+group = 'com.toru_otsuki'
+version = '0.0.1'
 
 java {
 	toolchain {
@@ -23,7 +23,7 @@ dependencies {
 }
 
 application {
-	mainClass = 'com.example.parser.Main'
+	mainClass = 'com.toru_otsuki.bridge_generator.Main'
 }
 
 spotless {

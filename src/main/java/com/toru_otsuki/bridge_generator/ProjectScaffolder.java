@@ -1,4 +1,4 @@
-package com.example.parser;
+package com.toru_otsuki.bridge_generator;
 
 import java.io.IOException;
 import java.nio.file.Files;

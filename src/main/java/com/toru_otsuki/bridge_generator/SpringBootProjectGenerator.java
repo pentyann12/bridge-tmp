@@ -1,4 +1,4 @@
-package com.example.parser;
+package com.toru_otsuki.bridge_generator;
 
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.PackageDeclaration;
@@ -13,11 +13,11 @@ import java.util.List;
 /**
  * CORBAサービスをRESTエンドポイントとして公開するSpring Bootプロジェクト（Gradle）を生成するユーティリティ
  *
- * 主な生成フロー:
+ * <p>主な生成フロー:
  *
- * 1. `#setupProject` でディレクトリ・共通ファイル・スタブコピー・構造体DTO/Mapperを出力
- * 2. `#generateService` でサービスごとのRequestDto/ResponseDto・CorbaClient・Controllerを出力
- * 3. `ServiceDtoWriter#writeApplicationProperties` でIOR設定ファイルを出力
+ * <p>1. `#setupProject` でディレクトリ・共通ファイル・スタブコピー・構造体DTO/Mapperを出力 2. `#generateService`
+ * でサービスごとのRequestDto/ResponseDto・CorbaClient・Controllerを出力 3.
+ * `ServiceDtoWriter#writeApplicationProperties` でIOR設定ファイルを出力
  */
 public class SpringBootProjectGenerator {
 
@@ -51,7 +51,8 @@ public class SpringBootProjectGenerator {
   }
 
   /**
-   * 複数のCORBAサービスインターフェースをまとめて単一のSpring Bootプロジェクトに生成 サービスごとに専用のCorbaClient（例: `ItemServiceCorbaClient`）とControllerが生成されます
+   * 複数のCORBAサービスインターフェースをまとめて単一のSpring Bootプロジェクトに生成 サービスごとに専用のCorbaClient（例:
+   * `ItemServiceCorbaClient`）とControllerが生成されます
    *
    * @param services CORBA サービスインターフェースのクラス宣言一覧
    * @param stubSourceRoot idlj によって生成されたスタブソースのルートディレクトリ
@@ -86,7 +87,7 @@ public class SpringBootProjectGenerator {
   /**
    * プロジェクトの共通部分（ディレクトリ・ビルドファイル・共有クラス・スタブ・構造体DTO/Mapper）を生成し、ベースの`GenContext`を返す
    *
-   * 返す`GenContext`は`servicePackage=""`、`returnAsDto=false`のプレースホルダー値を持つ。
+   * <p>返す`GenContext`は`servicePackage=""`、`returnAsDto=false`のプレースホルダー値を持つ。
    * サービス固有のコンテキストは`GenContext#withService`で生成すること。
    *
    * @param stubSourceRoot スタブのルートディレクトリ
@@ -110,8 +111,15 @@ public class SpringBootProjectGenerator {
 
     GenContext ctx =
         new GenContext(
-            basePkgName, "", false, idlPackagePrefix, repoIdPrefix,
-            javaDir, controllerDir, corbaDir, stubSourceRoot);
+            basePkgName,
+            "",
+            false,
+            idlPackagePrefix,
+            repoIdPrefix,
+            javaDir,
+            controllerDir,
+            corbaDir,
+            stubSourceRoot);
 
     Files.createDirectories(controllerDir);
     Files.createDirectories(ctx.dtoDir());

@@ -1,4 +1,4 @@
-package com.example.parser;
+package com.toru_otsuki.bridge_generator;
 
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
@@ -8,12 +8,13 @@ import java.util.List;
 /**
  * コントローラーメソッド1つ分のコード文字列を構築するユーティリティ
  *
- * out引数（Holder型）の有無で挙動が変わります:
+ * <p>out引数（Holder型）の有無で挙動が変わります:
  *
- * - out引数なし: 戻り値を直接返す通常のPOSTメソッドを生成 - out引数あり: 空のHolderを生成してCORBAを呼び出し、
- *   戻り値とout引数をまとめたResponseDtoを返すメソッドを生成
+ * <p>- out引数なし: 戻り値を直接返す通常のPOSTメソッドを生成 - out引数あり: 空のHolderを生成してCORBAを呼び出し、
+ * 戻り値とout引数をまとめたResponseDtoを返すメソッドを生成
  *
- * リクエストは`XxxRpcRequest`（`params`フィールドに`XxxRequestDto`）で受け取り、 レスポンスは`XxxRpcResponse`（`result.return`に実際の値）で返します。
+ * <p>リクエストは`XxxRpcRequest`（`params`フィールドに`XxxRequestDto`）で受け取り、
+ * レスポンスは`XxxRpcResponse`（`result.return`に実際の値）で返します。
  */
 final class ControllerMethodBuilder {
   private ControllerMethodBuilder() {}
@@ -84,7 +85,10 @@ final class ControllerMethodBuilder {
                       CorbaTypeUtils.resolveTypeFQN(returnType, method, ctx.servicePackage()),
                       methodName,
                       callArgs);
-      body = callLine + buildOutParamResponseDto(method, returnType, argNames, rpcResponseFqn, rpcResultFqn, ctx);
+      body =
+          callLine
+              + buildOutParamResponseDto(
+                  method, returnType, argNames, rpcResponseFqn, rpcResultFqn, ctx);
     } else if ("void".equals(returnType)) {
       body =
           "        client.%s(%s);\n".formatted(methodName, callArgs)
@@ -202,10 +206,8 @@ final class ControllerMethodBuilder {
   /**
    * in引数1つ分のDTO→CORBA変換コード文字列を返す。Holder型（out引数）はこのメソッドの対象外です。
    *
-   * - プリミティブ/String: `req`フィールドをそのまま代入
-   * - Any: `AnyMapper.toAny()` を経由
-   * - 配列型: `Arrays.stream().map(Mapper::fromDto).toArray()` で変換
-   * - 独自型: `XxxMapper.fromDto()` で変換
+   * <p>- プリミティブ/String: `req`フィールドをそのまま代入 - Any: `AnyMapper.toAny()` を経由 - 配列型:
+   * `Arrays.stream().map(Mapper::fromDto).toArray()` で変換 - 独自型: `XxxMapper.fromDto()` で変換
    *
    * @param param 対象のメソッドパラメーター宣言
    * @param argName 生成するローカル変数名
@@ -260,7 +262,8 @@ final class ControllerMethodBuilder {
    * @param rpcResultFqn `XxxRpcResult` の完全修飾クラス名
    * @return `XxxRpcResponse` を構築してreturnするコード文字列
    */
-  private static String buildRpcReturn(String valueExpr, String rpcResponseFqn, String rpcResultFqn) {
+  private static String buildRpcReturn(
+      String valueExpr, String rpcResponseFqn, String rpcResultFqn) {
     return """
             %s __result = new %s();
             __result.returnValue = %s;

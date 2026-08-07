@@ -1,4 +1,4 @@
-package com.example.parser;
+package com.toru_otsuki.bridge_generator;
 
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
@@ -18,12 +18,11 @@ import javax.lang.model.element.Modifier;
 /**
  * サービスメソッドごとのDTO群とapplication.ymlを出力するユーティリティ
  *
- * 1つのサービスメソッドに対して以下の4クラスを生成します:
+ * <p>1つのサービスメソッドに対して以下の4クラスを生成します:
  *
- * - `XxxRequestDto` — in引数をフィールドに持つリクエストDTO
- * - `XxxRpcRequest` — JSON-RPCリクエストのラッパー（`params: XxxRequestDto`）
- * - `XxxRpcResult` — JSON-RPCレスポンスの`result`オブジェクト（`@JsonProperty("return") returnValue`フィールド＋out引数フィールド）
- * - `XxxRpcResponse` — JSON-RPCレスポンスのラッパー（`result: XxxRpcResult`）
+ * <p>- `XxxRequestDto` — in引数をフィールドに持つリクエストDTO - `XxxRpcRequest` — JSON-RPCリクエストのラッパー（`params:
+ * XxxRequestDto`） - `XxxRpcResult` — JSON-RPCレスポンスの`result`オブジェクト（`@JsonProperty("return")
+ * returnValue`フィールド＋out引数フィールド） - `XxxRpcResponse` — JSON-RPCレスポンスのラッパー（`result: XxxRpcResult`）
  */
 final class ServiceDtoWriter {
   private ServiceDtoWriter() {}
@@ -31,7 +30,7 @@ final class ServiceDtoWriter {
   /**
    * CORBAサービスメソッド用のリクエストDTOとJSON-RPCラッパークラスを出力する
    *
-   * `XxxRequestDto`に加え、JSON-RPC形式のリクエストボディに対応する`XxxRpcRequest`も生成します。
+   * <p>`XxxRequestDto`に加え、JSON-RPC形式のリクエストボディに対応する`XxxRpcRequest`も生成します。
    * `XxxRpcRequest`は`jsonrpc`・`method`・`id`・`params`フィールドを持ち、`params`の型は`XxxRequestDto`です。
    *
    * @param method サービスメソッドの宣言
@@ -77,10 +76,10 @@ final class ServiceDtoWriter {
   /**
    * JSON-RPCレスポンス用の型付きクラスを出力する
    *
-   * 以下の2クラスを生成します:
+   * <p>以下の2クラスを生成します:
    *
-   * - `XxxRpcResult` — `@JsonProperty("return")` を付けた`returnValue`フィールドを持つ
-   * - `XxxRpcResponse` — `jsonrpc="2.0"`・`id=1`・`result: XxxRpcResult`
+   * <p>- `XxxRpcResult` — `@JsonProperty("return")` を付けた`returnValue`フィールドを持つ - `XxxRpcResponse` —
+   * `jsonrpc="2.0"`・`id=1`・`result: XxxRpcResult`
    *
    * @param method サービスメソッドの宣言
    * @param ctx コード生成コンテキスト

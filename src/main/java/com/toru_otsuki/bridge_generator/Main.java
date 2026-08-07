@@ -1,4 +1,4 @@
-package com.example.parser;
+package com.toru_otsuki.bridge_generator;
 
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
@@ -233,8 +233,7 @@ public class Main {
   }
 
   /**
-   * 指定したIDLファイルとそのincludeファイルを解析し、`#pragma prefix`で設定された
-   * リポジトリIDプレフィックスを返す。複数あれば最初に見つかったものを返す。
+   * 指定したIDLファイルとそのincludeファイルを解析し、`#pragma prefix`で設定された リポジトリIDプレフィックスを返す。複数あれば最初に見つかったものを返す。
    *
    * @param idlFile ルートのIDLファイル
    * @return `#pragma prefix` の値。見つからなければ空文字列
@@ -328,7 +327,7 @@ public class Main {
   /**
    * idljがデフォルトパッケージ（stubRoot直下）に出力した .javaファイルを 適切なパッケージへ移動し、それを参照しているimport文を更新する
    *
-   * IDLの仕様上、グローバルスコープで定義されたtypedef sequenceは モジュール外のデフォルトパッケージに出力されるため、名前付きパッケージからimport
+   * <p>IDLの仕様上、グローバルスコープで定義されたtypedef sequenceは モジュール外のデフォルトパッケージに出力されるため、名前付きパッケージからimport
    * できない。このメソッドはその問題を後処理として修正する
    *
    * @param stubRoot idlj の出力先ルートディレクトリ
@@ -403,8 +402,7 @@ public class Main {
   }
 
   /**
-   * クラス名を直接参照しているがimportを持たないファイルに完全修飾インポートを追加する
-   * idljが生成するコードの一部はimport文なしでクラス名を参照するため後処理が必要
+   * クラス名を直接参照しているがimportを持たないファイルに完全修飾インポートを追加する idljが生成するコードの一部はimport文なしでクラス名を参照するため後処理が必要
    *
    * @param stubRoot スタブディレクトリ
    * @param movedClasses 移動したクラス名の集合
@@ -430,8 +428,7 @@ public class Main {
   }
 
   /**
-   * `import Foo;`形式のパッケージなしベアインポートを全て削除する
-   * 前ステップで解決済みのインポートが残留していた場合のクリーンアップ
+   * `import Foo;`形式のパッケージなしベアインポートを全て削除する 前ステップで解決済みのインポートが残留していた場合のクリーンアップ
    *
    * @param stubRoot スタブディレクトリ
    */
@@ -495,9 +492,8 @@ public class Main {
   /**
    * グローバルスコープスタブの移動先パッケージを決定する。優先順位は以下のとおり:
    *
-   * 1. `idlPackagePrefix` が空でなければそれを使用
-   * 2. 既存スタブのpackage宣言から共通プレフィックスを求めて使用
-   * 3. 上記が得られなければ `generated`
+   * <p>1. `idlPackagePrefix` が空でなければそれを使用 2. 既存スタブのpackage宣言から共通プレフィックスを求めて使用 3. 上記が得られなければ
+   * `generated`
    *
    * @param stubRoot スタブのディレクトリ
    * @param idlPackagePrefix コマンド引数の-pkgPrefix

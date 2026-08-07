@@ -1,4 +1,4 @@
-package com.example.parser;
+package com.toru_otsuki.bridge_generator;
 
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -17,7 +17,7 @@ final class CorbaTypeUtils {
   /**
    * JSON-RPCレスポンスの`result.return`フィールドの型名を返す
    *
-   * voidなら`Object`、それ以外は戻り値型に応じたDTO/プリミティブ型を返します。
+   * <p>voidなら`Object`、それ以外は戻り値型に応じたDTO/プリミティブ型を返します。
    *
    * @param method サービスインターフェースのメソッド宣言
    * @param ctx コード生成コンテキスト
@@ -105,7 +105,7 @@ final class CorbaTypeUtils {
   /**
    * メソッド定義のimport文を参照して単純型名を完全修飾名に解決
    *
-   * JavaParserはシンボル解決なしでパースするため、IDLから生成されたスタブのimport文をスキャンして正しいパッケージを特定 グローバルスコープの型が
+   * <p>JavaParserはシンボル解決なしでパースするため、IDLから生成されたスタブのimport文をスキャンして正しいパッケージを特定 グローバルスコープの型が
    * idlPackagePrefix直下へ再配置された場合でも正しく解決できます
    *
    * @param type 解決したい型名（単純名または配列型、例: "GlobalTag[]"）
@@ -137,9 +137,9 @@ final class CorbaTypeUtils {
   /**
    * Holder型（CORBA out/inoutパラメーター）の`value`フィールドの型名を返す
    *
-   * CORBAプリミティブHolder（`org.omg.CORBA.IntHolder`等）はハードコードで対応し、
-   * 独自Holderはスタブファイルを解析して`value`フィールドの型を取得します。
-   * idljはsequence typedefに対して配列型の`value`フィールドを生成するため（例: `GlobalTag value[]`）、ファイル解析が必要です
+   * <p>CORBAプリミティブHolder（`org.omg.CORBA.IntHolder`等）はハードコードで対応し、
+   * 独自Holderはスタブファイルを解析して`value`フィールドの型を取得します。 idljはsequence typedefに対して配列型の`value`フィールドを生成するため（例:
+   * `GlobalTag value[]`）、ファイル解析が必要です
    *
    * @param holderType Holder型の名前（単純名またはFQN）
    * @param method 型が参照されているメソッド宣言
@@ -149,7 +149,9 @@ final class CorbaTypeUtils {
   static String resolveHolderValueType(
       String holderType, MethodDeclaration method, GenContext ctx) {
     String fqn =
-        holderType.contains(".") ? holderType : resolveTypeFQN(holderType, method, ctx.servicePackage());
+        holderType.contains(".")
+            ? holderType
+            : resolveTypeFQN(holderType, method, ctx.servicePackage());
     switch (fqn) {
       case "org.omg.CORBA.IntHolder":
         return "int";
@@ -208,11 +210,9 @@ final class CorbaTypeUtils {
   /**
    * CORBA型名をジェネレーター内部のDTO型名へマップ
    *
-   * - 配列型: 要素型を再帰変換して`[]`を付け直す（例: `com.pkg.Foo[]` → `dto.FooDto[]`）
-   * - `org.omg.CORBA.Any`: `AnyValue` へマップ
-   * - FQNを持つ型: 単純名 + `"Dto"`
-   * - プリミティブ/String: そのまま返す
-   * - 単純名の独自型: パッケージプレフィックスを追加して`"Dto"`を付ける
+   * <p>- 配列型: 要素型を再帰変換して`[]`を付け直す（例: `com.pkg.Foo[]` → `dto.FooDto[]`） - `org.omg.CORBA.Any`:
+   * `AnyValue` へマップ - FQNを持つ型: 単純名 + `"Dto"` - プリミティブ/String: そのまま返す - 単純名の独自型:
+   * パッケージプレフィックスを追加して`"Dto"`を付ける
    *
    * @param basePackage ベースパッケージ名
    * @param typeNameString マップ元の型名
@@ -233,9 +233,8 @@ final class CorbaTypeUtils {
   /**
    * CORBA値をDTOへ変換する式（代入RHSとして使える文字列）を返す
    *
-   * Stringは`returnAsDto`フラグに関係なく常に`StringMapper.encode()`でエンコードします
-   * （CORBAの文字列はISO-8859-1として渡されるSJISバイト列のため）。
-   * それ以外のプリミティブ/Anyは`returnAsDto=false`のときそのまま返します。
+   * <p>Stringは`returnAsDto`フラグに関係なく常に`StringMapper.encode()`でエンコードします
+   * （CORBAの文字列はISO-8859-1として渡されるSJISバイト列のため）。 それ以外のプリミティブ/Anyは`returnAsDto=false`のときそのまま返します。
    * 配列型は`Arrays.stream().map(Mapper::toDto).toArray()`形式、独自型は`XxxMapper.toDto(rhs)`形式になります
    *
    * @param rhs 変換元の式（例: "result", "arg0.value"）

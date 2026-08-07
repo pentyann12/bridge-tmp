@@ -1,4 +1,4 @@
-package com.example.parser;
+package com.toru_otsuki.bridge_generator;
 
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
@@ -9,9 +9,9 @@ import javax.lang.model.element.Modifier;
 /**
  * DTO生成クラス
  *
- * JavaParserで解析したIDL由来のクラス情報をもとに、JavaPoetを使用してDTOクラスを生成する
+ * <p>JavaParserで解析したIDL由来のクラス情報をもとに、JavaPoetを使用してDTOクラスを生成する
  *
- * - クラス名からDTOクラス名への変換 - フィールド型を変換（CORBA.Any→Object） - Javaソースコード生成とファイル出力
+ * <p>- クラス名からDTOクラス名への変換 - フィールド型を変換（CORBA.Any→Object） - Javaソースコード生成とファイル出力
  */
 public class DtoGenerator {
   /**

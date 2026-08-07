@@ -1,4 +1,4 @@
-package com.example.parser;
+package com.toru_otsuki.bridge_generator;
 
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;

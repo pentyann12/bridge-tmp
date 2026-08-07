@@ -1,4 +1,4 @@
-package com.example.parser;
+package com.toru_otsuki.bridge_generator;
 
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
@@ -100,7 +100,8 @@ public class MapperGenerator {
             fromDtoBody.addStatement("dst.$N = src.$N", nameField, nameField);
           } else {
             // 独自型の配列: 各要素を対応するMapperで変換する
-            ClassName nestedMapperClass = ClassName.get(ctx.basePackage() + ".mapper", simple + "Mapper");
+            ClassName nestedMapperClass =
+                ClassName.get(ctx.basePackage() + ".mapper", simple + "Mapper");
             ClassName dtoElemClass = ClassName.get(dtoPackage, simple + "Dto");
 
             // 要素型のパッケージを含む構造体のimport文から逆引きする。
@@ -145,7 +146,8 @@ public class MapperGenerator {
                 corbaElemClass);
           }
         } else {
-          ClassName nestedMapperClass = ClassName.get(ctx.basePackage() + ".mapper", simple + "Mapper");
+          ClassName nestedMapperClass =
+              ClassName.get(ctx.basePackage() + ".mapper", simple + "Mapper");
           toDtoBody.addStatement(
               "dto.$N = $T.toDto($N.$N)", nameField, nestedMapperClass, "src", nameField);
           fromDtoBody.addStatement(
