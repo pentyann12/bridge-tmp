@@ -58,9 +58,9 @@ final class CorbaClientWriter {
                           + args
                           + ")";
                   return """
-              public %s %s(%s) {
-                  %s;
-              }
+            public %s %s(%s) {
+              %s;
+            }
 
           """
                       .formatted(
@@ -76,19 +76,18 @@ final class CorbaClientWriter {
         package %s.corba;
 
         import org.omg.CORBA.ORB;
-        import org.omg.CORBA.Object;
         import org.springframework.beans.factory.annotation.Value;
         import org.springframework.stereotype.Component;
         %s
         @Component
         public class %s {
-            private final %s service;
+          private final %s service;
 
-            public %s(@Value("${corba.%s.ior}") String ior) {
-                ORB orb = ORB.init(new String[0], null);
-                org.omg.CORBA.Object obj = orb.string_to_object(ior);
-                this.service = %sHelper.narrow(obj);
-            }
+          public %s(@Value("${corba.%s.ior}") String ior) {
+            ORB orb = ORB.init(new String[0], null);
+            org.omg.CORBA.Object obj = orb.string_to_object(ior);
+            this.service = %sHelper.narrow(obj);
+          }
 
         %s}
         """

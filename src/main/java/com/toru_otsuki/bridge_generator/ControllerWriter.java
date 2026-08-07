@@ -33,11 +33,11 @@ final class ControllerWriter {
 
     String fieldAndCtor =
         """
-            private final %s client;
+          private final %s client;
 
-            public %s(%s client) {
-                this.client = client;
-            }
+          public %s(%s client) {
+            this.client = client;
+          }
         """
             .formatted(clientFqn, controllerName, clientFqn);
 

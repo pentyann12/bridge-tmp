@@ -45,12 +45,12 @@ final class ControllerMethodBuilder {
     // JSON-RPC形式で受け取る: XxxRpcRequest.paramsがXxxRequestDto
     String reqParam = hasInParams ? "@RequestBody " + rpcRequestFqn + " rpc" : "";
     String paramsExtraction =
-        hasInParams ? "        %s req = rpc.params;\n".formatted(requestDtoFqn) : "";
+        hasInParams ? "    %s req = rpc.params;\n".formatted(requestDtoFqn) : "";
 
     String signature =
         """
-            @PostMapping("/%s")
-            public %s %s(%s) {
+          @PostMapping("/%s")
+          public %s %s(%s) {
         """
             .formatted(methodName, rpcResponseFqn, methodName, reqParam);
 
@@ -66,7 +66,7 @@ final class ControllerMethodBuilder {
         String holderFqn =
             CorbaTypeUtils.resolveTypeFQN(param.getType().asString(), method, ctx.servicePackage());
         argConversions.append(
-            "        %s %s = new %s();\n".formatted(holderFqn, argName, holderFqn));
+            "    %s %s = new %s();\n".formatted(holderFqn, argName, holderFqn));
       } else {
         argConversions.append(buildInArgConversion(param, argName, "req", method, ctx));
       }
@@ -79,8 +79,8 @@ final class ControllerMethodBuilder {
       // CORBA呼び出し後にXxxRpcResultへ直接代入してXxxRpcResponseで返す
       String callLine =
           "void".equals(returnType)
-              ? "        client.%s(%s);\n".formatted(methodName, callArgs)
-              : "        %s callResult = client.%s(%s);\n"
+              ? "    client.%s(%s);\n".formatted(methodName, callArgs)
+              : "    %s callResult = client.%s(%s);\n"
                   .formatted(
                       CorbaTypeUtils.resolveTypeFQN(returnType, method, ctx.servicePackage()),
                       methodName,
@@ -91,7 +91,7 @@ final class ControllerMethodBuilder {
                   method, returnType, argNames, rpcResponseFqn, rpcResultFqn, ctx);
     } else if ("void".equals(returnType)) {
       body =
-          "        client.%s(%s);\n".formatted(methodName, callArgs)
+          "    client.%s(%s);\n".formatted(methodName, callArgs)
               + buildRpcReturn("null", rpcResponseFqn, rpcResultFqn);
     } else {
       body = buildDirectReturn(method, returnType, callArgs, rpcResponseFqn, rpcResultFqn, ctx);
@@ -99,7 +99,7 @@ final class ControllerMethodBuilder {
 
     String closing =
         """
-            }
+          }
 
         """;
 
@@ -127,11 +127,11 @@ final class ControllerMethodBuilder {
       GenContext ctx) {
 
     StringBuilder sb = new StringBuilder();
-    sb.append("        %s __result = new %s();\n".formatted(rpcResultFqn, rpcResultFqn));
+    sb.append("    %s __result = new %s();\n".formatted(rpcResultFqn, rpcResultFqn));
 
     if (!"void".equals(returnType)) {
       sb.append(
-          "        __result.returnValue = %s;\n"
+          "    __result.returnValue = %s;\n"
               .formatted(CorbaTypeUtils.corbaToDtoExpr("callResult", returnType, ctx)));
     }
 
@@ -141,15 +141,15 @@ final class ControllerMethodBuilder {
       String valueType =
           CorbaTypeUtils.resolveHolderValueType(param.getType().asString(), method, ctx);
       sb.append(
-          "        __result.%s = %s;\n"
+          "    __result.%s = %s;\n"
               .formatted(
                   param.getNameAsString(),
                   CorbaTypeUtils.corbaToDtoExpr(argNames.get(i) + ".value", valueType, ctx)));
     }
 
-    sb.append("        %s __response = new %s();\n".formatted(rpcResponseFqn, rpcResponseFqn));
-    sb.append("        __response.result = __result;\n");
-    sb.append("        return __response;\n");
+    sb.append("    %s __response = new %s();\n".formatted(rpcResponseFqn, rpcResponseFqn));
+    sb.append("    __response.result = __result;\n");
+    sb.append("    return __response;\n");
     return sb.toString();
   }
 
@@ -191,7 +191,7 @@ final class ControllerMethodBuilder {
       return buildRpcReturn(valueExpr, rpcResponseFqn, rpcResultFqn);
     } else {
       // 独自型または配列: result変数に受けてから変換する
-      return "        %s result = client.%s(%s);\n"
+      return "    %s result = client.%s(%s);\n"
               .formatted(
                   CorbaTypeUtils.resolveTypeFQN(returnType, method, ctx.servicePackage()),
                   methodName,
@@ -229,12 +229,12 @@ final class ControllerMethodBuilder {
 
     if (CorbaTypeUtils.isPrimitiveType(paramType)) {
       if ("String".equals(paramType)) {
-        return "        %s %s = %s.mapper.StringMapper.decode(%s);\n"
+        return "    %s %s = %s.mapper.StringMapper.decode(%s);\n"
             .formatted(paramType, argName, ctx.basePackage(), fieldRef);
       }
-      return "        %s %s = %s;\n".formatted(paramType, argName, fieldRef);
+      return "    %s %s = %s;\n".formatted(paramType, argName, fieldRef);
     } else if ("org.omg.CORBA.Any".equals(paramType)) {
-      return "        org.omg.CORBA.Any %s = %s.mapper.AnyMapper.toAny(%s);\n"
+      return "    org.omg.CORBA.Any %s = %s.mapper.AnyMapper.toAny(%s);\n"
           .formatted(argName, ctx.basePackage(), fieldRef);
     } else if (paramSimple.endsWith("[]")) {
       String elemSimple = paramSimple.substring(0, paramSimple.length() - 2);
@@ -242,14 +242,14 @@ final class ControllerMethodBuilder {
       String elemFqn =
           fqnParam.endsWith("[]") ? fqnParam.substring(0, fqnParam.length() - 2) : fqnParam;
       if ("String".equals(elemSimple)) {
-        return "        %s %s = %s == null ? null : java.util.Arrays.stream(%s).map(%s.mapper.StringMapper::decode).toArray(String[]::new);\n"
+        return "    %s %s = %s == null ? null : java.util.Arrays.stream(%s).map(%s.mapper.StringMapper::decode).toArray(String[]::new);\n"
             .formatted(fqnParam, argName, fieldRef, fieldRef, ctx.basePackage());
       }
-      return "        %s %s = %s == null ? null : java.util.Arrays.stream(%s).map(%s.mapper.%sMapper::fromDto).toArray(%s[]::new);\n"
+      return "    %s %s = %s == null ? null : java.util.Arrays.stream(%s).map(%s.mapper.%sMapper::fromDto).toArray(%s[]::new);\n"
           .formatted(fqnParam, argName, fieldRef, fieldRef, ctx.basePackage(), elemSimple, elemFqn);
     } else {
       String fqnParam = CorbaTypeUtils.resolveTypeFQN(paramType, method, ctx.servicePackage());
-      return "        %s %s = %s.mapper.%sMapper.fromDto(%s);\n"
+      return "    %s %s = %s.mapper.%sMapper.fromDto(%s);\n"
           .formatted(fqnParam, argName, ctx.basePackage(), paramSimple, fieldRef);
     }
   }
@@ -265,11 +265,11 @@ final class ControllerMethodBuilder {
   private static String buildRpcReturn(
       String valueExpr, String rpcResponseFqn, String rpcResultFqn) {
     return """
-            %s __result = new %s();
-            __result.returnValue = %s;
-            %s __response = new %s();
-            __response.result = __result;
-            return __response;
+        %s __result = new %s();
+        __result.returnValue = %s;
+        %s __response = new %s();
+        __response.result = __result;
+        return __response;
     """
         .formatted(rpcResultFqn, rpcResultFqn, valueExpr, rpcResponseFqn, rpcResponseFqn);
   }
