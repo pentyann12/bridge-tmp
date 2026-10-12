@@ -1,0 +1,21 @@
+[Grafana](https://dl.grafana.com/grafana/release/13.2.3/grafana_13.2.3_36482603486_windows_amd64.tar.gz)
+[Prometheus](https://github.com/prometheus/prometheus/releases/download/v3.15.0/prometheus-3.15.0.windows-amd64.zip)
+[tempo](https://github.com/grafana/tempo/releases/download/v3.1.0/tempo_3.1.0_windows_amd64.tar.gz)
+[loki](https://github.com/grafana/loki/releases/download/v3.7.8/loki-windows-amd64.exe.zip)
+[windows_exporter](https://github.com/prometheus-community/windows_exporter/releases/download/v0.31.9/windows_exporter-0.31.9-amd64.exe)
+[jmx-exporter](https://github.com/prometheus/jmx_exporter/releases/download/1.7.0/jmx_prometheus_javaagent-1.7.0.jar)
+
+
+
+ポート	プロセス	用途	主な接続元
+3000	Grafana	Web画面とAPI	ブラウザ
+3100	Loki	HTTP API（ログの受信・検索、OTLPのログの受信/otlp/v1/logs）	アプリ、Grafana
+3200	Tempo	HTTP API（トレースの検索）	Grafana
+4317	Tempo	OTLPのトレースの受信（gRPC）	アプリ
+4318	Tempo	OTLPのトレースの受信（HTTP）	アプリ、send-sample
+8080	Tomcat	HTTP（アプリ本体と各WARのActuator）	利用者、Prometheus
+9090	Prometheus	Web画面とAPI、remote writeの受信、OTLPのメトリクスの受信、設定のリロード	Grafana、Tempo
+9095	Tempo	gRPC（Tempo内部の部品間の通信）	Tempo自身
+9096	Loki	gRPC（Loki内部の部品間の通信）	Loki自身
+9182	windows_exporter	メトリクスの公開	Prometheus
+9404	Tomcat（JMX Exporter）	メトリクスの公開	Prometheus
