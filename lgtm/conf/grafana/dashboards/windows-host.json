@@ -1,0 +1,425 @@
+{
+  "uid": "lgtm-windows-host",
+  "title": "Windows Host (windows_exporter)",
+  "description": "windows_exporter で収集した Windows ホストの CPU・メモリ・ディスク・ネットワーク・プロセス・サービス",
+  "tags": ["lgtm", "windows", "host"],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "15s",
+  "schemaVersion": 41,
+  "time": { "from": "now-1h", "to": "now" },
+  "links": [
+    { "title": "LGTM", "type": "dashboards", "tags": ["lgtm"], "asDropdown": true, "icon": "external link" }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "label": "Host",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": { "qryType": 1, "query": "label_values(windows_os_info, instance)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
+        "definition": "label_values(windows_os_info, instance)",
+        "refresh": 2,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row", "title": "Overview", "id": 1, "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "panels": []
+    },
+    {
+      "type": "stat", "title": "Hostname", "id": 2,
+      "gridPos": { "h": 3, "w": 4, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "instant": true, "legendFormat": "{{fqdn}}", "expr": "windows_os_hostname{instance=\"$instance\"}" } ],
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "name", "colorMode": "none", "graphMode": "none", "text": { "valueSize": 20 } }
+    },
+    {
+      "type": "stat", "title": "OS", "id": 3,
+      "gridPos": { "h": 3, "w": 6, "x": 4, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "instant": true, "legendFormat": "{{product}} ({{version}})", "expr": "windows_os_info{instance=\"$instance\"}" } ],
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "name", "colorMode": "none", "graphMode": "none", "text": { "valueSize": 20 } }
+    },
+    {
+      "type": "stat", "title": "Uptime", "id": 4,
+      "gridPos": { "h": 3, "w": 4, "x": 10, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "instant": true, "expr": "time() - windows_system_boot_time_timestamp{instance=\"$instance\"}" } ],
+      "fieldConfig": { "defaults": { "unit": "dtdurations", "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value", "colorMode": "none", "graphMode": "none", "text": { "valueSize": 20 } }
+    },
+    {
+      "type": "stat", "title": "Logical CPUs", "id": 5,
+      "gridPos": { "h": 3, "w": 3, "x": 14, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "instant": true, "expr": "count(windows_cpu_time_total{instance=\"$instance\", mode=\"idle\"})" } ],
+      "fieldConfig": { "defaults": { "unit": "none", "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value", "colorMode": "none", "graphMode": "none", "text": { "valueSize": 20 } }
+    },
+    {
+      "type": "stat", "title": "Physical memory", "id": 6,
+      "gridPos": { "h": 3, "w": 3, "x": 17, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "instant": true, "expr": "windows_memory_physical_total_bytes{instance=\"$instance\"}" } ],
+      "fieldConfig": { "defaults": { "unit": "bytes", "decimals": 1, "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value", "colorMode": "none", "graphMode": "none", "text": { "valueSize": 20 } }
+    },
+    {
+      "type": "stat", "title": "Processes / Threads", "id": 7,
+      "gridPos": { "h": 3, "w": 4, "x": 20, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "instant": true, "legendFormat": "procs", "expr": "windows_system_processes{instance=\"$instance\"}" },
+        { "refId": "B", "instant": true, "legendFormat": "threads", "expr": "windows_system_threads{instance=\"$instance\"}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "none", "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name", "colorMode": "none", "graphMode": "none", "orientation": "horizontal", "text": { "valueSize": 16, "titleSize": 12 } }
+    },
+    {
+      "type": "gauge", "title": "CPU usage", "id": 8,
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "100 * (1 - avg(rate(windows_cpu_time_total{instance=\"$instance\", mode=\"idle\"}[$__rate_interval])))" } ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "min": 0, "max": 100, "decimals": 1,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 70 }, { "color": "red", "value": 90 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "showThresholdMarkers": true, "showThresholdLabels": false }
+    },
+    {
+      "type": "gauge", "title": "Memory usage", "id": 9,
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "100 * (1 - windows_memory_available_bytes{instance=\"$instance\"} / windows_memory_physical_total_bytes{instance=\"$instance\"})" } ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "min": 0, "max": 100, "decimals": 1,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 80 }, { "color": "red", "value": 90 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "showThresholdMarkers": true, "showThresholdLabels": false }
+    },
+    {
+      "type": "gauge", "title": "Commit charge", "id": 10,
+      "description": "コミット済みメモリ / コミット上限 (物理メモリ + ページファイル)",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "100 * windows_memory_committed_bytes{instance=\"$instance\"} / windows_memory_commit_limit{instance=\"$instance\"}" } ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "min": 0, "max": 100, "decimals": 1,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 80 }, { "color": "red", "value": 90 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "showThresholdMarkers": true, "showThresholdLabels": false }
+    },
+    {
+      "type": "bargauge", "title": "Disk usage", "id": 11,
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "instant": true, "legendFormat": "{{volume}}", "expr": "100 * (1 - windows_logical_disk_free_bytes{instance=\"$instance\", volume=~\"[A-Z]:\"} / windows_logical_disk_size_bytes{instance=\"$instance\", volume=~\"[A-Z]:\"})" } ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "min": 0, "max": 100, "decimals": 1,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 80 }, { "color": "red", "value": 90 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true, "valueMode": "color", "namePlacement": "left" }
+    },
+    {
+      "type": "row", "title": "CPU / Memory", "id": 20, "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 10 }, "panels": []
+    },
+    {
+      "type": "timeseries", "title": "CPU usage by mode", "id": 21,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 11 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "legendFormat": "{{mode}}", "expr": "100 * sum by (mode) (rate(windows_cpu_time_total{instance=\"$instance\", mode!=\"idle\"}[$__rate_interval])) / scalar(count(windows_cpu_time_total{instance=\"$instance\", mode=\"idle\"}))" } ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "min": 0, "max": 100,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 60, "stacking": { "mode": "normal" }, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "timeseries", "title": "CPU usage per logical processor", "id": 22,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 11 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "legendFormat": "core {{core}}", "expr": "100 * (1 - rate(windows_cpu_time_total{instance=\"$instance\", mode=\"idle\"}[$__rate_interval]))" } ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "min": 0, "max": 100,
+          "color": { "mode": "continuous-GrYlRd", "seriesBy": "max" },
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "hidden", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "timeseries", "title": "Memory", "id": 23,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 19 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "In use", "expr": "windows_memory_physical_total_bytes{instance=\"$instance\"} - windows_memory_available_bytes{instance=\"$instance\"}" },
+        { "refId": "B", "legendFormat": "Available", "expr": "windows_memory_available_bytes{instance=\"$instance\"}" },
+        { "refId": "C", "legendFormat": "Committed", "expr": "windows_memory_committed_bytes{instance=\"$instance\"}" },
+        { "refId": "D", "legendFormat": "Total", "expr": "windows_memory_physical_total_bytes{instance=\"$instance\"}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes", "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 40, "stacking": { "mode": "normal", "group": "A" }, "showPoints": "never" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "In use" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] },
+          { "matcher": { "id": "byName", "options": "Available" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
+          { "matcher": { "id": "byName", "options": "Committed" }, "properties": [
+            { "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } },
+            { "id": "custom.stacking", "value": { "mode": "none", "group": "B" } },
+            { "id": "custom.fillOpacity", "value": 0 }, { "id": "custom.lineWidth", "value": 2 }
+          ] },
+          { "matcher": { "id": "byName", "options": "Total" }, "properties": [
+            { "id": "color", "value": { "mode": "fixed", "fixedColor": "text" } },
+            { "id": "custom.stacking", "value": { "mode": "none", "group": "C" } },
+            { "id": "custom.fillOpacity", "value": 0 }, { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [6, 4] } }
+          ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "type": "timeseries", "title": "System load", "id": 24,
+      "description": "プロセッサキュー長 (CPU 待ちスレッド数) とコンテキストスイッチ",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 19 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "Processor queue length", "expr": "windows_system_processor_queue_length{instance=\"$instance\"}" },
+        { "refId": "B", "legendFormat": "Context switches/s", "expr": "rate(windows_system_context_switches_total{instance=\"$instance\"}[$__rate_interval])" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Context switches/s" }, "properties": [
+            { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.fillOpacity", "value": 0 }, { "id": "custom.lineWidth", "value": 1 }
+          ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "type": "row", "title": "Disk", "id": 30, "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 }, "panels": []
+    },
+    {
+      "type": "table", "title": "Volumes", "id": 31,
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 28 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "format": "table", "instant": true, "range": false, "expr": "windows_logical_disk_size_bytes{instance=\"$instance\", volume=~\"[A-Z]:\"}" },
+        { "refId": "B", "format": "table", "instant": true, "range": false, "expr": "windows_logical_disk_free_bytes{instance=\"$instance\", volume=~\"[A-Z]:\"}" },
+        { "refId": "C", "format": "table", "instant": true, "range": false, "expr": "100 * (1 - windows_logical_disk_free_bytes{instance=\"$instance\", volume=~\"[A-Z]:\"} / windows_logical_disk_size_bytes{instance=\"$instance\", volume=~\"[A-Z]:\"})" }
+      ],
+      "transformations": [
+        { "id": "merge", "options": {} },
+        { "id": "organize", "options": {
+            "excludeByName": { "Time": true, "instance": true, "job": true, "__name__": true },
+            "indexByName": { "volume": 0, "Value #A": 1, "Value #B": 2, "Value #C": 3 },
+            "renameByName": { "volume": "Volume", "Value #A": "Size", "Value #B": "Free", "Value #C": "Used" }
+        } }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Size" }, "properties": [ { "id": "unit", "value": "bytes" }, { "id": "decimals", "value": 1 } ] },
+          { "matcher": { "id": "byName", "options": "Free" }, "properties": [ { "id": "unit", "value": "bytes" }, { "id": "decimals", "value": 1 } ] },
+          { "matcher": { "id": "byName", "options": "Used" }, "properties": [
+            { "id": "unit", "value": "percent" }, { "id": "min", "value": 0 }, { "id": "max", "value": 100 },
+            { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "gradient", "valueDisplayMode": "text" } },
+            { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 80 }, { "color": "red", "value": 90 } ] } }
+          ] }
+        ]
+      },
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false } }
+    },
+    {
+      "type": "timeseries", "title": "Disk throughput (read + / write −)", "id": 32,
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 28 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{volume}} read", "expr": "rate(windows_logical_disk_read_bytes_total{instance=\"$instance\", volume=~\"[A-Z]:\"}[$__rate_interval])" },
+        { "refId": "B", "legendFormat": "{{volume}} write", "expr": "-rate(windows_logical_disk_write_bytes_total{instance=\"$instance\", volume=~\"[A-Z]:\"}[$__rate_interval])" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "Bps", "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 20, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "timeseries", "title": "Disk busy", "id": 33,
+      "description": "100% − アイドル時間の割合",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 28 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{volume}}", "expr": "clamp_min(100 * (1 - rate(windows_logical_disk_idle_seconds_total{instance=\"$instance\", volume=~\"[A-Z]:\"}[$__rate_interval])), 0)" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0, "max": 100, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "row", "title": "Network", "id": 40, "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 36 }, "panels": []
+    },
+    {
+      "type": "timeseries", "title": "Network traffic (receive + / send −)", "id": 41,
+      "description": "リンクアップしている (帯域 > 0) NIC のみ",
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 37 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{nic}} rx", "expr": "8 * rate(windows_net_bytes_received_total{instance=\"$instance\"}[$__rate_interval]) and on (instance, nic) windows_net_current_bandwidth_bytes > 0" },
+        { "refId": "B", "legendFormat": "{{nic}} tx", "expr": "-8 * rate(windows_net_bytes_sent_total{instance=\"$instance\"}[$__rate_interval]) and on (instance, nic) windows_net_current_bandwidth_bytes > 0" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bps", "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 20, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "timeseries", "title": "Packet errors / discards", "id": 42,
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 37 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{nic}} rx errors", "expr": "rate(windows_net_packets_received_errors_total{instance=\"$instance\"}[$__rate_interval]) and on (instance, nic) windows_net_current_bandwidth_bytes > 0" },
+        { "refId": "B", "legendFormat": "{{nic}} rx discards", "expr": "rate(windows_net_packets_received_discarded_total{instance=\"$instance\"}[$__rate_interval]) and on (instance, nic) windows_net_current_bandwidth_bytes > 0" },
+        { "refId": "C", "legendFormat": "{{nic}} tx errors", "expr": "rate(windows_net_packets_outbound_errors_total{instance=\"$instance\"}[$__rate_interval]) and on (instance, nic) windows_net_current_bandwidth_bytes > 0" },
+        { "refId": "D", "legendFormat": "{{nic}} tx discards", "expr": "rate(windows_net_packets_outbound_discarded_total{instance=\"$instance\"}[$__rate_interval]) and on (instance, nic) windows_net_current_bandwidth_bytes > 0" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "pps", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "row", "title": "LGTM processes", "id": 50, "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 45 }, "panels": []
+    },
+    {
+      "type": "timeseries", "title": "CPU by process", "id": 51,
+      "description": "ホスト全体の CPU に対する割合 (conf/windows_exporter/config.yml の process.include で対象を絞っている)",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 46 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "legendFormat": "{{process}}", "expr": "100 * sum by (process) (rate(windows_process_cpu_time_total{instance=\"$instance\"}[$__rate_interval])) / scalar(count(windows_cpu_time_total{instance=\"$instance\", mode=\"idle\"}))" } ],
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "timeseries", "title": "Working set by process", "id": 52,
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 46 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "legendFormat": "{{process}}", "expr": "sum by (process) (windows_process_working_set_bytes{instance=\"$instance\"})" } ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 50, "stacking": { "mode": "normal" }, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "table", "title": "Process details", "id": 53,
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 46 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "format": "table", "instant": true, "range": false, "expr": "sum by (process) (windows_process_working_set_private_bytes{instance=\"$instance\"})" },
+        { "refId": "B", "format": "table", "instant": true, "range": false, "expr": "sum by (process) (windows_process_threads{instance=\"$instance\"})" },
+        { "refId": "C", "format": "table", "instant": true, "range": false, "expr": "sum by (process) (windows_process_handles{instance=\"$instance\"})" },
+        { "refId": "D", "format": "table", "instant": true, "range": false, "expr": "time() - max by (process) (windows_process_start_time_seconds_timestamp{instance=\"$instance\"})" }
+      ],
+      "transformations": [
+        { "id": "merge", "options": {} },
+        { "id": "organize", "options": {
+            "excludeByName": { "Time": true },
+            "indexByName": { "process": 0, "Value #A": 1, "Value #B": 2, "Value #C": 3, "Value #D": 4 },
+            "renameByName": { "process": "Process", "Value #A": "Private WS", "Value #B": "Threads", "Value #C": "Handles", "Value #D": "Running for" }
+        } },
+        { "id": "sortBy", "options": { "sort": [ { "field": "Private WS", "desc": true } ] } }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Private WS" }, "properties": [ { "id": "unit", "value": "bytes" }, { "id": "decimals", "value": 0 } ] },
+          { "matcher": { "id": "byName", "options": "Running for" }, "properties": [ { "id": "unit", "value": "dtdurations" } ] }
+        ]
+      },
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false } }
+    },
+    {
+      "type": "row", "title": "Services", "id": 60, "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 54 },
+      "panels": [
+        {
+          "type": "stat", "title": "Services", "id": 61,
+          "gridPos": { "h": 8, "w": 6, "x": 0, "y": 55 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "instant": true, "legendFormat": "Running", "expr": "count(windows_service_state{instance=\"$instance\", state=\"running\"} == 1)" },
+            { "refId": "B", "instant": true, "legendFormat": "Stopped", "expr": "count(windows_service_state{instance=\"$instance\", state=\"stopped\"} == 1)" },
+            { "refId": "C", "instant": true, "legendFormat": "Auto-start but not running", "expr": "count((windows_service_state{instance=\"$instance\", state!=\"running\"} == 1) and on (instance, name) (windows_service_start_mode{instance=\"$instance\", start_mode=\"auto\"} == 1)) or vector(0)" }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "none", "color": { "mode": "fixed", "fixedColor": "text" } },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "Running" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
+              { "matcher": { "id": "byName", "options": "Auto-start but not running" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] }
+            ]
+          },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name", "colorMode": "value", "graphMode": "none", "orientation": "horizontal", "text": { "valueSize": 24, "titleSize": 12 } }
+        },
+        {
+          "type": "table", "title": "Auto-start services that are not running", "id": 62,
+          "description": "スタートアップの種類が「自動」なのに running でないサービス (遅延開始・トリガー開始のものも含まれる)",
+          "gridPos": { "h": 8, "w": 18, "x": 6, "y": 55 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "format": "table", "instant": true, "range": false, "expr": "((windows_service_state{instance=\"$instance\", state!=\"running\"} == 1) and on (instance, name) (windows_service_start_mode{instance=\"$instance\", start_mode=\"auto\"} == 1)) * on (instance, name) group_left (display_name) windows_service_info{instance=\"$instance\"}" }
+          ],
+          "transformations": [
+            { "id": "merge", "options": {} },
+            { "id": "organize", "options": {
+                "excludeByName": { "Time": true, "Value": true, "instance": true, "job": true, "__name__": true },
+                "indexByName": { "display_name": 0, "name": 1, "state": 2 },
+                "renameByName": { "display_name": "Display name", "name": "Service", "state": "State" }
+            } }
+          ],
+          "fieldConfig": { "defaults": { "custom": { "align": "auto" } }, "overrides": [] },
+          "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false } }
+        }
+      ]
+    }
+  ]
+}

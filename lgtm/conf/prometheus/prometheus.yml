@@ -1,0 +1,24 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+storage:
+  tsdb:
+    retention:
+      time: 7d
+    out_of_order_time_window: 30m
+
+otlp:
+  promote_resource_attributes:
+    - service.instance.id
+    - service.name
+    - service.namespace
+    - service.version
+    - deployment.environment
+    - deployment.environment.name
+    - host.name
+
+scrape_configs:
+  - job_name: file_sd
+    file_sd_configs:
+      - files: ["targets/*.yml", "targets/*.yaml"]

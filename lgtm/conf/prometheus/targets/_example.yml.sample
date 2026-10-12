@@ -1,0 +1,14 @@
+- targets: ["127.0.0.1:9182"]
+  labels:
+    job: windows
+    env: local
+
+- targets: ["127.0.0.1:8080", "127.0.0.1:8081"]
+  labels:
+    job: myapp
+    team: dev
+
+- targets: ["127.0.0.1:8090"]
+  labels:
+    job: springapp
+    __metrics_path__: /actuator/prometheus

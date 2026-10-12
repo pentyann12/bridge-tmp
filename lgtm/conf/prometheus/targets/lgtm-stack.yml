@@ -1,0 +1,15 @@
+- targets: ["127.0.0.1:9090"]
+  labels:
+    job: prometheus
+
+- targets: ["127.0.0.1:3100"]
+  labels:
+    job: loki
+
+- targets: ["127.0.0.1:3200"]
+  labels:
+    job: tempo
+
+- targets: ["127.0.0.1:3000"]
+  labels:
+    job: grafana

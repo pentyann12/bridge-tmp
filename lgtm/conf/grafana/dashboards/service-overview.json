@@ -1,0 +1,400 @@
+{
+  "uid": "lgtm-service-overview",
+  "title": "Service Overview (LGTM)",
+  "description": "Tempo の metrics-generator が生成した RED メトリクス・サービスグラフと、Loki のログ、Tempo のトレースを 1 画面で見るダッシュボード",
+  "tags": ["lgtm", "red", "tempo", "loki"],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "10s",
+  "schemaVersion": 41,
+  "time": { "from": "now-30m", "to": "now" },
+  "links": [
+    { "title": "Explore", "type": "link", "url": "/explore", "icon": "compass", "targetBlank": false }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": { "qryType": 1, "query": "label_values(traces_spanmetrics_calls_total, service)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
+        "definition": "label_values(traces_spanmetrics_calls_total, service)",
+        "refresh": 2,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": { "text": ["All"], "value": ["$__all"] }
+      },
+      {
+        "name": "level",
+        "label": "Log level",
+        "type": "custom",
+        "query": "info,error",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": { "text": ["All"], "value": ["$__all"] },
+        "options": [
+          { "text": "All", "value": "$__all", "selected": true },
+          { "text": "info", "value": "info", "selected": false },
+          { "text": "error", "value": "error", "selected": false }
+        ]
+      },
+      {
+        "name": "search",
+        "label": "Log search",
+        "type": "textbox",
+        "query": "",
+        "current": { "text": "", "value": "" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row", "title": "Overview", "id": 1, "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "panels": []
+    },
+    {
+      "type": "stat", "title": "Requests / sec", "id": 2,
+      "description": "SERVER スパンの秒間リクエスト数",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(traces_spanmetrics_calls_total{service=~\"${service:regex}\", span_kind=\"SPAN_KIND_SERVER\"}[$__rate_interval]))" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "decimals": 2, "color": { "mode": "fixed", "fixedColor": "blue" } },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "area", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "type": "stat", "title": "Error rate", "id": 3,
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "100 * (sum(rate(traces_spanmetrics_calls_total{service=~\"${service:regex}\", span_kind=\"SPAN_KIND_SERVER\", status_code=\"STATUS_CODE_ERROR\"}[$__rate_interval])) or vector(0)) / sum(rate(traces_spanmetrics_calls_total{service=~\"${service:regex}\", span_kind=\"SPAN_KIND_SERVER\"}[$__rate_interval]))" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "decimals": 1,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null }, { "color": "orange", "value": 5 }, { "color": "red", "value": 15 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "area", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "type": "stat", "title": "p95 latency", "id": 4,
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_latency_bucket{service=~\"${service:regex}\", span_kind=\"SPAN_KIND_SERVER\"}[$__rate_interval])))" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s", "decimals": 0,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null }, { "color": "orange", "value": 0.3 }, { "color": "red", "value": 0.5 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "area", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "type": "stat", "title": "Active services", "id": 5,
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "count(count by (service) (rate(traces_spanmetrics_calls_total{service=~\"${service:regex}\"}[$__rate_interval]) > 0))" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "none", "color": { "mode": "fixed", "fixedColor": "purple" } },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "type": "stat", "title": "Log lines / sec", "id": 6,
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        { "refId": "A", "queryType": "range", "expr": "sum(rate({service_name=~\"${service:regex}\"} [$__auto]))" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 2, "color": { "mode": "fixed", "fixedColor": "green" } },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "area", "colorMode": "value", "textMode": "value" }
+    },
+    {
+      "type": "stat", "title": "Error logs (last 5m)", "id": 7,
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        { "refId": "A", "queryType": "instant", "expr": "sum(count_over_time({service_name=~\"${service:regex}\", level=\"error\"} [5m])) or vector(0)" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 10 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "colorMode": "background", "textMode": "value" }
+    },
+    {
+      "type": "nodeGraph", "title": "Service graph", "id": 8,
+      "description": "Tempo の service-graphs プロセッサが生成したメトリクスから描画。ノードをクリックすると関連メトリクス・トレースへ移動できる",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 5 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        { "refId": "A", "queryType": "serviceMap", "datasource": { "type": "tempo", "uid": "tempo" } }
+      ],
+      "options": {}
+    },
+    {
+      "type": "timeseries", "title": "Request rate by service", "id": 9,
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{service}}", "expr": "sum by (service) (rate(traces_spanmetrics_calls_total{service=~\"${service:regex}\", span_kind=\"SPAN_KIND_SERVER\"}[$__rate_interval]))" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15, "gradientMode": "opacity", "stacking": { "mode": "none" }, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "timeseries", "title": "Error rate by service", "id": 10,
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 15 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{service}}", "expr": "100 * (sum by (service) (rate(traces_spanmetrics_calls_total{service=~\"${service:regex}\", span_kind=\"SPAN_KIND_SERVER\", status_code=\"STATUS_CODE_ERROR\"}[$__rate_interval])) or 0 * sum by (service) (rate(traces_spanmetrics_calls_total{service=~\"${service:regex}\", span_kind=\"SPAN_KIND_SERVER\"}[$__rate_interval]))) / sum by (service) (rate(traces_spanmetrics_calls_total{service=~\"${service:regex}\", span_kind=\"SPAN_KIND_SERVER\"}[$__rate_interval]))" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "min": 0,
+          "custom": {
+            "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never",
+            "thresholdsStyle": { "mode": "dashed+area" }
+          },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "transparent", "value": null }, { "color": "red", "value": 15 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "timeseries", "title": "Latency percentiles (exemplars → trace)", "id": 11,
+      "description": "点 (exemplar) にカーソルを合わせると、その値を記録したトレースへジャンプできる",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 15 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "p50", "expr": "histogram_quantile(0.50, sum by (le) (rate(traces_spanmetrics_latency_bucket{service=~\"${service:regex}\", span_kind=\"SPAN_KIND_SERVER\"}[$__rate_interval])))" },
+        { "refId": "B", "legendFormat": "p95", "exemplar": true, "expr": "histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_latency_bucket{service=~\"${service:regex}\", span_kind=\"SPAN_KIND_SERVER\"}[$__rate_interval])))" },
+        { "refId": "C", "legendFormat": "p99", "expr": "histogram_quantile(0.99, sum by (le) (rate(traces_spanmetrics_latency_bucket{service=~\"${service:regex}\", span_kind=\"SPAN_KIND_SERVER\"}[$__rate_interval])))" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s", "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "p50" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
+          { "matcher": { "id": "byName", "options": "p95" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] },
+          { "matcher": { "id": "byName", "options": "p99" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "timeseries", "title": "p95 latency by service", "id": 12,
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 15 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{service}}", "expr": "histogram_quantile(0.95, sum by (le, service) (rate(traces_spanmetrics_latency_bucket{service=~\"${service:regex}\", span_kind=\"SPAN_KIND_SERVER\"}[$__rate_interval])))" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s", "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "table", "title": "Endpoints", "id": 13,
+      "description": "サービス × スパン名ごとの RED。Error % / p95 はセル色で強調",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 23 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "format": "table", "instant": true, "range": false, "expr": "sum by (service, span_name) (rate(traces_spanmetrics_calls_total{service=~\"${service:regex}\", span_kind=\"SPAN_KIND_SERVER\"}[5m]))" },
+        { "refId": "B", "format": "table", "instant": true, "range": false, "expr": "100 * (sum by (service, span_name) (rate(traces_spanmetrics_calls_total{service=~\"${service:regex}\", span_kind=\"SPAN_KIND_SERVER\", status_code=\"STATUS_CODE_ERROR\"}[5m])) or 0 * sum by (service, span_name) (rate(traces_spanmetrics_calls_total{service=~\"${service:regex}\", span_kind=\"SPAN_KIND_SERVER\"}[5m]))) / sum by (service, span_name) (rate(traces_spanmetrics_calls_total{service=~\"${service:regex}\", span_kind=\"SPAN_KIND_SERVER\"}[5m]))" },
+        { "refId": "C", "format": "table", "instant": true, "range": false, "expr": "histogram_quantile(0.95, sum by (le, service, span_name) (rate(traces_spanmetrics_latency_bucket{service=~\"${service:regex}\", span_kind=\"SPAN_KIND_SERVER\"}[5m])))" }
+      ],
+      "transformations": [
+        { "id": "merge", "options": {} },
+        { "id": "organize", "options": {
+            "excludeByName": { "Time": true },
+            "indexByName": { "service": 0, "span_name": 1, "Value #A": 2, "Value #B": 3, "Value #C": 4 },
+            "renameByName": { "service": "Service", "span_name": "Endpoint", "Value #A": "Requests/s", "Value #B": "Error %", "Value #C": "p95" }
+        } },
+        { "id": "sortBy", "options": { "sort": [{ "field": "Requests/s", "desc": true }] } }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Requests/s" }, "properties": [
+            { "id": "unit", "value": "reqps" }, { "id": "decimals", "value": 3 },
+            { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "lcd" } },
+            { "id": "color", "value": { "mode": "continuous-BlPu" } }
+          ] },
+          { "matcher": { "id": "byName", "options": "Error %" }, "properties": [
+            { "id": "unit", "value": "percent" }, { "id": "decimals", "value": 1 },
+            { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "gradient" } },
+            { "id": "thresholds", "value": { "mode": "absolute", "steps": [
+              { "color": "green", "value": null }, { "color": "orange", "value": 5 }, { "color": "red", "value": 15 }
+            ] } }
+          ] },
+          { "matcher": { "id": "byName", "options": "p95" }, "properties": [
+            { "id": "unit", "value": "s" },
+            { "id": "custom.cellOptions", "value": { "type": "color-text" } },
+            { "id": "thresholds", "value": { "mode": "absolute", "steps": [
+              { "color": "green", "value": null }, { "color": "orange", "value": 0.3 }, { "color": "red", "value": 0.5 }
+            ] } }
+          ] }
+        ]
+      },
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false } }
+    },
+    {
+      "type": "row", "title": "Logs (Loki)", "id": 20, "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 }, "panels": []
+    },
+    {
+      "type": "timeseries", "title": "Log volume by level", "id": 21,
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 33 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        { "refId": "A", "queryType": "range", "legendFormat": "{{level}}", "expr": "sum by (level) (count_over_time({service_name=~\"${service:regex}\", level=~\"${level:regex}\"} |~ \"(?i)$search\" [$__auto]))" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "bars", "fillOpacity": 80, "lineWidth": 1, "stacking": { "mode": "normal" }, "showPoints": "never" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "info" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
+          { "matcher": { "id": "byName", "options": "error" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "type": "logs", "title": "Logs  (traceID をクリック → Tempo)", "id": 22,
+      "gridPos": { "h": 11, "w": 24, "x": 0, "y": 40 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        { "refId": "A", "queryType": "range", "maxLines": 500, "expr": "{service_name=~\"${service:regex}\", level=~\"${level:regex}\"} |~ \"(?i)$search\"" }
+      ],
+      "options": {
+        "showTime": true, "showLabels": true, "showCommonLabels": false, "wrapLogMessage": true,
+        "prettifyLogMessage": false, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending"
+      }
+    },
+    {
+      "type": "row", "title": "Traces (Tempo)", "id": 30, "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 51 }, "panels": []
+    },
+    {
+      "type": "table", "title": "Recent error traces", "id": 31,
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 52 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        { "refId": "A", "queryType": "traceql", "tableType": "traces", "limit": 20, "query": "{ resource.service.name =~ \"${service:regex}\" && status = error }" }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true, "cellHeight": "sm" }
+    },
+    {
+      "type": "table", "title": "Slow traces (> 300ms)", "id": 32,
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 52 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        { "refId": "A", "queryType": "traceql", "tableType": "traces", "limit": 20, "query": "{ resource.service.name =~ \"${service:regex}\" && kind = server && duration > 300ms }" }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true, "cellHeight": "sm" }
+    },
+    {
+      "type": "row", "title": "Stack health", "id": 40, "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 62 },
+      "panels": [
+        {
+          "type": "stat", "title": "Components", "id": 41,
+          "gridPos": { "h": 4, "w": 24, "x": 0, "y": 63 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "refId": "A", "legendFormat": "{{job}}", "instant": true, "expr": "up" } ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [ { "type": "value", "options": {
+                "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" }
+              } } ],
+              "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }
+            },
+            "overrides": []
+          },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "value_and_name", "orientation": "vertical" }
+        },
+        {
+          "type": "timeseries", "title": "Ingestion", "id": 42,
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 67 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "legendFormat": "Loki lines/s", "expr": "sum(rate(loki_distributor_lines_received_total[$__rate_interval]))" },
+            { "refId": "B", "legendFormat": "Tempo spans/s", "expr": "sum(rate(tempo_distributor_spans_received_total[$__rate_interval]))" },
+            { "refId": "C", "legendFormat": "Prometheus samples/s", "expr": "sum(rate(prometheus_tsdb_head_samples_appended_total[$__rate_interval]))" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+        },
+        {
+          "type": "timeseries", "title": "Memory (RSS)", "id": 43,
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 67 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "legendFormat": "{{job}}", "expr": "process_resident_memory_bytes" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+        },
+        {
+          "type": "timeseries", "title": "Prometheus head series", "id": 44,
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 67 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "legendFormat": "series", "expr": "prometheus_tsdb_head_series" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" } }
+        }
+      ]
+    }
+  ]
+}

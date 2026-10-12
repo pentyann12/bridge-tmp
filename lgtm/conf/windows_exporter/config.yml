@@ -1,0 +1,18 @@
+# windows_exporter 設定
+# キーはコマンドラインフラグ名を "." で階層化したもの (例: --web.listen-address → web: listen-address:)
+# 一覧: system\windows_exporter\windows_exporter.exe --help
+
+web:
+  listen-address: ":9182"
+
+collectors:
+  # 既定の collector + process
+  enabled: "cpu,memory,logical_disk,physical_disk,net,os,service,system,process"
+
+collector:
+  process:
+    # プロセス単位のメトリクスは LGTM スタックの exe に絞る (全プロセスだと系列数が多くなる)
+    include: "^(prometheus|loki-windows-amd64|tempo|grafana|windows_exporter)$"
+
+log:
+  level: info

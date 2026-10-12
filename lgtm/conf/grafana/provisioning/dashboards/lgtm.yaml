@@ -1,0 +1,10 @@
+# conf/grafana/dashboards/ に置いた JSON ダッシュボードを自動読み込みする
+apiVersion: 1
+
+providers:
+  - name: lgtm
+    folder: LGTM
+    type: file
+    allowUiUpdates: true
+    options:
+      path: ${LGTM_HOME}/conf/grafana/dashboards

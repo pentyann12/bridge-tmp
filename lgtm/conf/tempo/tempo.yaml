@@ -1,0 +1,55 @@
+stream_over_http_enabled: true
+
+server:
+  http_listen_address: 0.0.0.0
+  http_listen_port: 3200
+  grpc_listen_address: 0.0.0.0
+  grpc_listen_port: 9095
+  log_level: info
+
+# トレースの受け口 (OTLP)
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+# トレースから生成したサービスグラフの書き込み先（=Prometheus）
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+  storage:
+    path: ${LGTM_ROOT}/data/tempo-metrics/wal
+    remote_write:
+      - url: http://127.0.0.1:9090/api/v1/write
+        send_exemplars: true
+
+backend_scheduler:
+  provider:
+    compaction:
+      compaction:
+        block_retention: 168h
+
+backend_worker:
+  compaction:
+    block_retention: 168h
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: ${LGTM_ROOT}/data/tempo/wal
+    local:
+      path: ${LGTM_ROOT}/data/tempo/blocks
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [service-graphs, span-metrics, local-blocks]
+
+usage_report:
+  reporting_enabled: false
