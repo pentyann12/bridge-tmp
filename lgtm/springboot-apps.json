@@ -20,8 +20,8 @@
         "label": "Application",
         "type": "query",
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "query": { "qryType": 1, "query": "label_values(http_server_requests_seconds_count, service_name)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
-        "definition": "label_values(http_server_requests_seconds_count, service_name)",
+        "query": { "qryType": 1, "query": "label_values({__name__=~\"http_server_requests_seconds_count|process_uptime_seconds|logback_events_total\"}, service_name)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
+        "definition": "label_values({__name__=~\"http_server_requests_seconds_count|process_uptime_seconds|logback_events_total\"}, service_name)",
         "refresh": 2,
         "sort": 1,
         "multi": true,
@@ -32,15 +32,16 @@
       {
         "name": "instance",
         "label": "Instance",
+        "description": "service.instance.idを送っているアプリのみ選択肢に出る",
         "type": "query",
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "query": { "qryType": 1, "query": "label_values(http_server_requests_seconds_count{service_name=~\"${service:regex}\"}, instance)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
-        "definition": "label_values(http_server_requests_seconds_count{service_name=~\"${service:regex}\"}, instance)",
+        "query": { "qryType": 1, "query": "label_values({__name__=~\"http_server_requests_seconds_count|process_uptime_seconds|logback_events_total\", service_name=~\"${service:regex}\"}, instance)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
+        "definition": "label_values({__name__=~\"http_server_requests_seconds_count|process_uptime_seconds|logback_events_total\", service_name=~\"${service:regex}\"}, instance)",
         "refresh": 2,
         "sort": 1,
         "multi": true,
         "includeAll": true,
-        "allValue": ".+",
+        "allValue": ".*",
         "current": { "text": ["All"], "value": ["$__all"] }
       }
     ]
@@ -52,24 +53,24 @@
     },
     {
       "type": "table", "title": "Applications", "id": 2,
-      "description": "直近5分。Actuatorへのリクエストは除外。Instancesはservice.instance.idの数",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 1 },
+      "description": "直近5分。Actuatorへのリクエストは除外",
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 1 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "interval": "1m",
       "targets": [
-        { "refId": "A", "format": "table", "instant": true, "range": false, "expr": "count by (service_name) (count by (service_name, instance) (http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}))" },
+        { "refId": "A", "format": "table", "instant": true, "range": false, "expr": "max by (service_name) (process_uptime_seconds{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"})" },
         { "refId": "B", "format": "table", "instant": true, "range": false, "expr": "sum by (service_name) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[5m]))" },
         { "refId": "C", "format": "table", "instant": true, "range": false, "expr": "100 * (sum by (service_name) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\", status=~\"5..\"}[5m])) or 0 * sum by (service_name) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[5m]))) / sum by (service_name) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[5m]))" },
-        { "refId": "D", "format": "table", "instant": true, "range": false, "expr": "histogram_quantile(0.95, sum by (service_name, le) (rate(http_server_requests_seconds_bucket{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[5m])))" },
-        { "refId": "E", "format": "table", "instant": true, "range": false, "expr": "sum by (service_name) (http_server_requests_active_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"})" },
-        { "refId": "F", "format": "table", "instant": true, "range": false, "expr": "60 * sum by (service_name) (rate(logback_events_total{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", level=\"error\"}[5m]))" }
+        { "refId": "D", "format": "table", "instant": true, "range": false, "expr": "sum by (service_name) (rate(http_server_requests_seconds_sum{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[5m])) / sum by (service_name) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[5m]))" },
+        { "refId": "E", "format": "table", "instant": true, "range": false, "expr": "max by (service_name) (max_over_time(http_server_requests_max_seconds{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[5m]))" },
+        { "refId": "F", "format": "table", "instant": true, "range": false, "expr": "60 * sum by (service_name) (rate(logback_events_total{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", level=\"error\"}[5m]))" },
+        { "refId": "G", "format": "table", "instant": true, "range": false, "expr": "100 * sum by (service_name) (jvm_memory_used_bytes{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", area=\"heap\"}) / sum by (service_name) (jvm_memory_max_bytes{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", area=\"heap\"} > 0)" }
       ],
       "transformations": [
         { "id": "merge", "options": {} },
         { "id": "organize", "options": {
             "excludeByName": { "Time": true },
-            "indexByName": { "service_name": 0, "Value #A": 1, "Value #B": 2, "Value #C": 3, "Value #D": 4, "Value #E": 5, "Value #F": 6 },
-            "renameByName": { "service_name": "Application", "Value #A": "Instances", "Value #B": "Requests/s", "Value #C": "5xx %", "Value #D": "p95", "Value #E": "In flight", "Value #F": "Error logs/min" }
+            "indexByName": { "service_name": 0, "Value #A": 1, "Value #B": 2, "Value #C": 3, "Value #D": 4, "Value #E": 5, "Value #F": 6, "Value #G": 7 },
+            "renameByName": { "service_name": "Application", "Value #A": "Uptime", "Value #B": "Requests/s", "Value #C": "5xx %", "Value #D": "Avg latency", "Value #E": "Max latency", "Value #F": "Error logs/min", "Value #G": "Heap %" }
         } },
         { "id": "sortBy", "options": { "sort": [ { "field": "Requests/s", "desc": true } ] } }
       ],
@@ -79,6 +80,7 @@
           { "matcher": { "id": "byName", "options": "Application" }, "properties": [
             { "id": "links", "value": [ { "title": "このアプリだけ表示", "url": "/d/lgtm-springboot-apps?var-service=${__value.raw}&${__url_time_range}" } ] }
           ] },
+          { "matcher": { "id": "byName", "options": "Uptime" }, "properties": [ { "id": "unit", "value": "dtdurations" } ] },
           { "matcher": { "id": "byName", "options": "Requests/s" }, "properties": [
             { "id": "unit", "value": "reqps" }, { "id": "decimals", "value": 2 },
             { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "lcd" } },
@@ -89,7 +91,7 @@
             { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "gradient" } },
             { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 5 } ] } }
           ] },
-          { "matcher": { "id": "byName", "options": "p95" }, "properties": [
+          { "matcher": { "id": "byRegexp", "options": "^(Avg|Max) latency$" }, "properties": [
             { "id": "unit", "value": "s" },
             { "id": "custom.cellOptions", "value": { "type": "color-text" } },
             { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 0.5 }, { "color": "red", "value": 1 } ] } }
@@ -98,6 +100,11 @@
             { "id": "decimals", "value": 1 },
             { "id": "custom.cellOptions", "value": { "type": "color-text" } },
             { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 0.1 } ] } }
+          ] },
+          { "matcher": { "id": "byName", "options": "Heap %" }, "properties": [
+            { "id": "unit", "value": "percent" }, { "id": "min", "value": 0 }, { "id": "max", "value": 100 },
+            { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "gradient", "valueDisplayMode": "text" } },
+            { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 75 }, { "color": "red", "value": 90 } ] } }
           ] }
         ]
       },
@@ -105,22 +112,22 @@
     },
     {
       "type": "row", "title": "HTTP server", "id": 10, "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 }, "panels": []
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 8 }, "panels": []
     },
     {
       "type": "timeseries", "title": "Request rate", "id": 11,
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 10 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 9 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "interval": "1m",
+      "interval": "30s",
       "targets": [ { "refId": "A", "legendFormat": "{{service_name}}", "expr": "sum by (service_name) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[$__rate_interval]))" } ],
       "fieldConfig": { "defaults": { "unit": "reqps", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
     },
     {
       "type": "timeseries", "title": "5xx rate", "id": 12,
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 10 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 9 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "interval": "1m",
+      "interval": "30s",
       "targets": [ { "refId": "A", "legendFormat": "{{service_name}}", "expr": "100 * (sum by (service_name) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\", status=~\"5..\"}[$__rate_interval])) or 0 * sum by (service_name) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[$__rate_interval]))) / sum by (service_name) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[$__rate_interval]))" } ],
       "fieldConfig": {
         "defaults": {
@@ -133,33 +140,47 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
     },
     {
-      "type": "timeseries", "title": "p95 latency (exemplars → trace)", "id": 13,
-      "description": "点(exemplar)からそのリクエストのトレースへ移動できる。percentiles-histogramの有効化が必要",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 10 },
+      "type": "timeseries", "title": "Latency (exemplars → trace)", "id": 13,
+      "description": "実線: 平均、破線: 最大。点(exemplar)にカーソルを合わせると、そのリクエストのトレースへ移動できる",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 9 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "interval": "1m",
-      "targets": [ { "refId": "A", "legendFormat": "{{service_name}}", "exemplar": true, "expr": "histogram_quantile(0.95, sum by (service_name, le) (rate(http_server_requests_seconds_bucket{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[$__rate_interval])))" } ],
-      "fieldConfig": { "defaults": { "unit": "s", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "interval": "30s",
+      "targets": [
+        { "refId": "A", "legendFormat": "{{service_name}} avg", "expr": "sum by (service_name) (rate(http_server_requests_seconds_sum{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[$__rate_interval])) / sum by (service_name) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[$__rate_interval]))" },
+        { "refId": "B", "legendFormat": "{{service_name}} max", "expr": "max by (service_name) (http_server_requests_max_seconds{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"})" },
+        { "refId": "C", "legendFormat": "exemplars", "exemplar": true, "expr": "sum(rate(http_server_requests_seconds_bucket{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\", le=\"+Inf\"}[$__rate_interval])) * 0" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" } },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": ".* max$" }, "properties": [
+            { "id": "custom.fillOpacity", "value": 0 },
+            { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [6, 4] } }
+          ] },
+          { "matcher": { "id": "byName", "options": "exemplars" }, "properties": [
+            { "id": "custom.hideFrom", "value": { "legend": true, "tooltip": true, "viz": true } }
+          ] }
+        ]
+      },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
     },
     {
       "type": "table", "title": "Endpoints", "id": 14,
       "description": "直近5分",
-      "gridPos": { "h": 9, "w": 16, "x": 0, "y": 18 },
+      "gridPos": { "h": 9, "w": 16, "x": 0, "y": 17 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "interval": "1m",
       "targets": [
         { "refId": "A", "format": "table", "instant": true, "range": false, "expr": "sum by (service_name, method, uri) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[5m]))" },
         { "refId": "B", "format": "table", "instant": true, "range": false, "expr": "100 * (sum by (service_name, method, uri) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\", status=~\"5..\"}[5m])) or 0 * sum by (service_name, method, uri) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[5m]))) / sum by (service_name, method, uri) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[5m]))" },
-        { "refId": "C", "format": "table", "instant": true, "range": false, "expr": "histogram_quantile(0.95, sum by (service_name, method, uri, le) (rate(http_server_requests_seconds_bucket{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[5m])))" },
-        { "refId": "D", "format": "table", "instant": true, "range": false, "expr": "histogram_quantile(0.99, sum by (service_name, method, uri, le) (rate(http_server_requests_seconds_bucket{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[5m])))" }
+        { "refId": "C", "format": "table", "instant": true, "range": false, "expr": "sum by (service_name, method, uri) (rate(http_server_requests_seconds_sum{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[5m])) / sum by (service_name, method, uri) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[5m]))" },
+        { "refId": "D", "format": "table", "instant": true, "range": false, "expr": "max by (service_name, method, uri) (max_over_time(http_server_requests_max_seconds{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[5m]))" }
       ],
       "transformations": [
         { "id": "merge", "options": {} },
         { "id": "organize", "options": {
             "excludeByName": { "Time": true },
             "indexByName": { "service_name": 0, "method": 1, "uri": 2, "Value #A": 3, "Value #B": 4, "Value #C": 5, "Value #D": 6 },
-            "renameByName": { "service_name": "Application", "method": "Method", "uri": "URI", "Value #A": "Requests/s", "Value #B": "5xx %", "Value #C": "p95", "Value #D": "p99" }
+            "renameByName": { "service_name": "Application", "method": "Method", "uri": "URI", "Value #A": "Requests/s", "Value #B": "5xx %", "Value #C": "Avg", "Value #D": "Max" }
         } },
         { "id": "sortBy", "options": { "sort": [ { "field": "Requests/s", "desc": true } ] } }
       ],
@@ -176,7 +197,7 @@
             { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "gradient" } },
             { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 5 } ] } }
           ] },
-          { "matcher": { "id": "byRegexp", "options": "^(p95|p99)$" }, "properties": [
+          { "matcher": { "id": "byRegexp", "options": "^(Avg|Max)$" }, "properties": [
             { "id": "unit", "value": "s" },
             { "id": "custom.cellOptions", "value": { "type": "color-text" } },
             { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 0.5 }, { "color": "red", "value": 1 } ] } }
@@ -187,12 +208,10 @@
     },
     {
       "type": "timeseries", "title": "Responses by status", "id": 15,
-      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 18 },
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 17 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "interval": "1m",
-      "targets": [
-        { "refId": "A", "legendFormat": "{{status}}", "expr": "sum by (status) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[$__rate_interval]))" }
-      ],
+      "interval": "30s",
+      "targets": [ { "refId": "A", "legendFormat": "{{status}}", "expr": "sum by (status) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", uri!~\"/actuator.*\"}[$__rate_interval]))" } ],
       "fieldConfig": {
         "defaults": { "unit": "reqps", "min": 0, "custom": { "drawStyle": "bars", "fillOpacity": 70, "lineWidth": 1, "stacking": { "mode": "normal" }, "showPoints": "never" } },
         "overrides": [
@@ -207,45 +226,136 @@
     {
       "type": "timeseries", "title": "Exceptions", "id": 16,
       "description": "コントローラーから送出された例外の種類別",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 27 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "interval": "1m",
+      "interval": "30s",
       "targets": [ { "refId": "A", "legendFormat": "{{service_name}} {{exception}}", "expr": "sum by (service_name, exception) (rate(http_server_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", exception!=\"none\", exception!=\"\"}[$__rate_interval]))" } ],
       "fieldConfig": { "defaults": { "unit": "reqps", "min": 0, "custom": { "drawStyle": "bars", "fillOpacity": 70, "lineWidth": 1, "stacking": { "mode": "normal" }, "showPoints": "never" } }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
     },
     {
       "type": "timeseries", "title": "In-flight requests", "id": 17,
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 27 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "interval": "1m",
+      "interval": "30s",
       "targets": [ { "refId": "A", "legendFormat": "{{service_name}}", "expr": "sum by (service_name) (http_server_requests_active_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"})" } ],
       "fieldConfig": { "defaults": { "unit": "none", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
     },
     {
-      "type": "row", "title": "Dependencies (HTTP client / DB)", "id": 20, "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 35 }, "panels": []
+      "type": "row", "title": "Database (HikariCP)", "id": 20, "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 }, "panels": []
     },
     {
-      "type": "timeseries", "title": "Outbound HTTP avg latency", "id": 21,
-      "description": "RestClient / RestTemplate / WebClientからの呼び出し先ごと",
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 36 },
+      "type": "timeseries", "title": "Connection pool", "id": 21,
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 35 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "interval": "1m",
-      "targets": [ { "refId": "A", "legendFormat": "{{service_name}} → {{client_name}}", "expr": "sum by (service_name, client_name) (rate(http_client_requests_seconds_sum{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}[$__rate_interval])) / sum by (service_name, client_name) (rate(http_client_requests_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}[$__rate_interval]))" } ],
-      "fieldConfig": { "defaults": { "unit": "s", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "interval": "30s",
+      "targets": [
+        { "refId": "A", "legendFormat": "{{service_name}} {{pool}} active", "expr": "sum by (service_name, pool) (hikaricp_connections_active{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"})" },
+        { "refId": "B", "legendFormat": "{{service_name}} {{pool}} idle", "expr": "sum by (service_name, pool) (hikaricp_connections_idle{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"})" },
+        { "refId": "C", "legendFormat": "{{service_name}} {{pool}} pending", "expr": "sum by (service_name, pool) (hikaricp_connections_pending{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"})" },
+        { "refId": "D", "legendFormat": "{{service_name}} {{pool}} max", "expr": "max by (service_name, pool) (hikaricp_connections_max{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"})" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "none", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" } },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": ".* max$" }, "properties": [
+            { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } },
+            { "id": "custom.fillOpacity", "value": 0 },
+            { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [6, 4] } }
+          ] },
+          { "matcher": { "id": "byRegexp", "options": ".* pending$" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] }
+        ]
+      },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
     },
     {
-      "type": "timeseries", "title": "DB connection pool (HikariCP)", "id": 22,
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 36 },
+      "type": "timeseries", "title": "Connection acquire / usage time", "id": 22,
+      "description": "acquire: プールからコネクションを取得するまでの待ち時間 (増えていれば枯渇の兆候)、usage: コネクションを借りていた時間",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 35 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "interval": "1m",
+      "interval": "30s",
       "targets": [
-        { "refId": "A", "legendFormat": "{{service_name}} {{pool}} active", "expr": "sum by (service_name, pool) (hikaricp_connections_active{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"})" },
-        { "refId": "B", "legendFormat": "{{service_name}} {{pool}} pending", "expr": "sum by (service_name, pool) (hikaricp_connections_pending{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"})" },
-        { "refId": "C", "legendFormat": "{{service_name}} {{pool}} max", "expr": "max by (service_name, pool) (hikaricp_connections_max{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"})" }
+        { "refId": "A", "legendFormat": "{{service_name}} acquire avg", "expr": "sum by (service_name) (rate(hikaricp_connections_acquire_seconds_sum{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}[$__rate_interval])) / sum by (service_name) (rate(hikaricp_connections_acquire_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}[$__rate_interval]))" },
+        { "refId": "B", "legendFormat": "{{service_name}} acquire max", "expr": "max by (service_name) (hikaricp_connections_acquire_max_seconds{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"})" },
+        { "refId": "C", "legendFormat": "{{service_name}} usage avg", "expr": "sum by (service_name) (rate(hikaricp_connections_usage_seconds_sum{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}[$__rate_interval])) / sum by (service_name) (rate(hikaricp_connections_usage_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}[$__rate_interval]))" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" } },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": ".* max$" }, "properties": [
+            { "id": "custom.fillOpacity", "value": 0 },
+            { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [6, 4] } }
+          ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "timeseries", "title": "Connection timeouts", "id": 23,
+      "description": "コネクションを取得できずタイムアウトした回数",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 35 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "interval": "30s",
+      "targets": [ { "refId": "A", "legendFormat": "{{service_name}} {{pool}}", "expr": "sum by (service_name, pool) (increase(hikaricp_connections_timeout_total{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}[$__rate_interval]))" } ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "min": 0, "decimals": 0,
+          "custom": { "drawStyle": "bars", "fillOpacity": 70, "lineWidth": 1, "showPoints": "never" },
+          "color": { "mode": "fixed", "fixedColor": "red" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "row", "title": "Scheduled tasks / executors", "id": 30, "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 43 }, "panels": []
+    },
+    {
+      "type": "table", "title": "Scheduled tasks", "id": 31,
+      "description": "@Scheduledメソッドごと (直近5分)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 44 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "format": "table", "instant": true, "range": false, "expr": "60 * sum by (service_name, code_namespace, code_function) (rate(tasks_scheduled_execution_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}[5m]))" },
+        { "refId": "B", "format": "table", "instant": true, "range": false, "expr": "60 * (sum by (service_name, code_namespace, code_function) (rate(tasks_scheduled_execution_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", outcome!=\"SUCCESS\"}[5m])) or 0 * sum by (service_name, code_namespace, code_function) (rate(tasks_scheduled_execution_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}[5m])))" },
+        { "refId": "C", "format": "table", "instant": true, "range": false, "expr": "sum by (service_name, code_namespace, code_function) (rate(tasks_scheduled_execution_seconds_sum{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}[5m])) / sum by (service_name, code_namespace, code_function) (rate(tasks_scheduled_execution_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}[5m]))" },
+        { "refId": "D", "format": "table", "instant": true, "range": false, "expr": "max by (service_name, code_namespace, code_function) (max_over_time(tasks_scheduled_execution_max_seconds{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}[5m]))" }
+      ],
+      "transformations": [
+        { "id": "merge", "options": {} },
+        { "id": "organize", "options": {
+            "excludeByName": { "Time": true },
+            "indexByName": { "service_name": 0, "code_namespace": 1, "code_function": 2, "Value #A": 3, "Value #B": 4, "Value #C": 5, "Value #D": 6 },
+            "renameByName": { "service_name": "Application", "code_namespace": "Class", "code_function": "Method", "Value #A": "Runs/min", "Value #B": "Failures/min", "Value #C": "Avg", "Value #D": "Max" }
+        } }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Runs/min" }, "properties": [ { "id": "decimals", "value": 1 } ] },
+          { "matcher": { "id": "byName", "options": "Failures/min" }, "properties": [
+            { "id": "decimals", "value": 1 },
+            { "id": "custom.cellOptions", "value": { "type": "color-text" } },
+            { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 0.01 } ] } }
+          ] },
+          { "matcher": { "id": "byRegexp", "options": "^(Avg|Max)$" }, "properties": [ { "id": "unit", "value": "s" } ] }
+        ]
+      },
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false } }
+    },
+    {
+      "type": "timeseries", "title": "Executors", "id": 32,
+      "description": "Springのスレッドプール (applicationTaskExecutor / taskSchedulerなど)。破線は上限",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 44 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "interval": "30s",
+      "targets": [
+        { "refId": "A", "legendFormat": "{{service_name}} {{name}} active", "expr": "sum by (service_name, name) (executor_active_threads{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"})" },
+        { "refId": "B", "legendFormat": "{{service_name}} {{name}} queued", "expr": "sum by (service_name, name) (executor_queued_tasks{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"})" },
+        { "refId": "C", "legendFormat": "{{service_name}} {{name}} max", "expr": "max by (service_name, name) (executor_pool_max_threads{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"} < 1000)" }
       ],
       "fieldConfig": {
         "defaults": { "unit": "none", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" } },
@@ -254,44 +364,91 @@
             { "id": "custom.fillOpacity", "value": 0 },
             { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [6, 4] } }
           ] },
-          { "matcher": { "id": "byRegexp", "options": ".* pending$" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] }
+          { "matcher": { "id": "byRegexp", "options": ".* queued$" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] }
         ]
       },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
     },
     {
-      "type": "timeseries", "title": "DB connection acquire time", "id": 23,
-      "description": "プールからコネクションを取得するまでの平均待ち時間。増えていればプール枯渇の兆候",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 36 },
+      "type": "row", "title": "JVM (per application)", "id": 40, "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 52 }, "panels": []
+    },
+    {
+      "type": "timeseries", "title": "Heap", "id": 41,
+      "description": "アプリ側でJVMメトリクスを止めている場合は空になる (その場合はTomcat / JVMダッシュボードを参照)",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 53 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "interval": "1m",
+      "interval": "30s",
       "targets": [
-        { "refId": "A", "legendFormat": "{{service_name}} {{pool}}", "expr": "sum by (service_name, pool) (rate(hikaricp_connections_acquire_seconds_sum{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}[$__rate_interval])) / sum by (service_name, pool) (rate(hikaricp_connections_acquire_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}[$__rate_interval]))" },
-        { "refId": "B", "legendFormat": "{{service_name}} {{pool}} timeouts/s", "expr": "sum by (service_name, pool) (rate(hikaricp_connections_timeout_total{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}[$__rate_interval])) > 0" }
+        { "refId": "A", "legendFormat": "{{service_name}} used", "expr": "sum by (service_name) (jvm_memory_used_bytes{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", area=\"heap\"})" },
+        { "refId": "B", "legendFormat": "{{service_name}} committed", "expr": "sum by (service_name) (jvm_memory_committed_bytes{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", area=\"heap\"})" },
+        { "refId": "C", "legendFormat": "{{service_name}} max", "expr": "sum by (service_name) (jvm_memory_max_bytes{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", area=\"heap\"} > 0)" }
       ],
       "fieldConfig": {
-        "defaults": { "unit": "s", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" } },
+        "defaults": { "unit": "bytes", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" } },
         "overrides": [
-          { "matcher": { "id": "byRegexp", "options": ".*timeouts/s$" }, "properties": [
-            { "id": "unit", "value": "short" },
-            { "id": "custom.axisPlacement", "value": "right" },
-            { "id": "custom.drawStyle", "value": "bars" },
-            { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+          { "matcher": { "id": "byRegexp", "options": ".* used$" }, "properties": [ { "id": "custom.fillOpacity", "value": 30 } ] },
+          { "matcher": { "id": "byRegexp", "options": ".* max$" }, "properties": [ { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [6, 4] } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "type": "timeseries", "title": "GC pause", "id": 42,
+      "description": "棒: GC回数/秒、線: GCで停止していた時間の割合",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 53 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "interval": "30s",
+      "targets": [
+        { "refId": "A", "legendFormat": "{{service_name}} {{gc}} count/s", "expr": "sum by (service_name, gc) (rate(jvm_gc_pause_seconds_count{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}[$__rate_interval]))" },
+        { "refId": "B", "legendFormat": "{{service_name}} pause %", "expr": "100 * sum by (service_name) (rate(jvm_gc_pause_seconds_sum{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"}[$__rate_interval]))" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "min": 0, "custom": { "drawStyle": "bars", "fillOpacity": 60, "lineWidth": 1, "showPoints": "never" } },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": ".* pause %$" }, "properties": [
+            { "id": "unit", "value": "percent" },
+            { "id": "custom.drawStyle", "value": "line" },
+            { "id": "custom.lineWidth", "value": 2 },
+            { "id": "custom.fillOpacity", "value": 0 },
+            { "id": "custom.axisPlacement", "value": "right" }
           ] }
         ]
       },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
     },
     {
-      "type": "row", "title": "Logs", "id": 30, "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 44 }, "panels": []
-    },
-    {
-      "type": "timeseries", "title": "Log events by level", "id": 31,
-      "description": "Logbackが出力したログの件数 (Actuatorのメトリクス)",
-      "gridPos": { "h": 10, "w": 8, "x": 0, "y": 45 },
+      "type": "timeseries", "title": "CPU / threads", "id": 43,
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 53 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "interval": "1m",
+      "interval": "30s",
+      "targets": [
+        { "refId": "A", "legendFormat": "{{service_name}} process CPU", "expr": "max by (service_name) (process_cpu_usage{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"})" },
+        { "refId": "B", "legendFormat": "{{service_name}} live threads", "expr": "max by (service_name) (jvm_threads_live{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\"})" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" } },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": ".* live threads$" }, "properties": [
+            { "id": "unit", "value": "none" },
+            { "id": "custom.axisPlacement", "value": "right" },
+            { "id": "custom.fillOpacity", "value": 0 },
+            { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [6, 4] } }
+          ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "type": "row", "title": "Logs", "id": 50, "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 61 }, "panels": []
+    },
+    {
+      "type": "timeseries", "title": "Log events by level", "id": 51,
+      "description": "Logbackが出力したログの件数 (メトリクス)",
+      "gridPos": { "h": 10, "w": 8, "x": 0, "y": 62 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "interval": "30s",
       "targets": [ { "refId": "A", "legendFormat": "{{level}}", "expr": "sum by (level) (rate(logback_events_total{service_name=~\"${service:regex}\", instance=~\"${instance:regex}\", level=~\"error|warn|info\"}[$__rate_interval]))" } ],
       "fieldConfig": {
         "defaults": { "unit": "short", "min": 0, "custom": { "drawStyle": "bars", "fillOpacity": 70, "lineWidth": 1, "stacking": { "mode": "normal" }, "showPoints": "never" } },
@@ -304,8 +461,9 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
     },
     {
-      "type": "logs", "title": "Warn / error logs", "id": 32,
-      "gridPos": { "h": 10, "w": 16, "x": 8, "y": 45 },
+      "type": "logs", "title": "Warn / error logs", "id": 52,
+      "description": "LokiにOTLPなどでログを送っている場合に表示される",
+      "gridPos": { "h": 10, "w": 16, "x": 8, "y": 62 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [ { "refId": "A", "queryType": "range", "maxLines": 300, "expr": "{service_name=~\"${service:regex}\"} | detected_level=~\"(?i)(warn|warning|error|fatal)\"" } ],
       "options": {
@@ -314,20 +472,20 @@
       }
     },
     {
-      "type": "row", "title": "Traces", "id": 40, "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 55 }, "panels": []
+      "type": "row", "title": "Traces", "id": 60, "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 72 }, "panels": []
     },
     {
-      "type": "table", "title": "Recent error traces", "id": 41,
-      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 56 },
+      "type": "table", "title": "Recent error traces", "id": 61,
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 73 },
       "datasource": { "type": "tempo", "uid": "tempo" },
       "targets": [ { "refId": "A", "queryType": "traceql", "tableType": "traces", "limit": 20, "query": "{ resource.service.name =~ \"${service:regex}\" && status = error }" } ],
       "fieldConfig": { "defaults": {}, "overrides": [] },
       "options": { "showHeader": true, "cellHeight": "sm" }
     },
     {
-      "type": "table", "title": "Slow requests (> 1s)", "id": 42,
-      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 56 },
+      "type": "table", "title": "Slow requests (> 1s)", "id": 62,
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 73 },
       "datasource": { "type": "tempo", "uid": "tempo" },
       "targets": [ { "refId": "A", "queryType": "traceql", "tableType": "traces", "limit": 20, "query": "{ resource.service.name =~ \"${service:regex}\" && kind = server && duration > 1s && span.url.path !~ \".*/actuator.*\" }" } ],
       "fieldConfig": { "defaults": {}, "overrides": [] },
