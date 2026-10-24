@@ -2,423 +2,144 @@
 
 ## 概要
 
-このツールは CORBA サービスの IDL ファイルを入力として受け取り、その CORBA サービスを REST API として公開する Spring Boot プロジェクトを自動生成します。
+CORBA サービスの IDL ファイルを入力に、その CORBA サービスを JSON-RPC 風の REST API として公開する Spring Boot プロジェクトを生成します。
 
 ```
 IDL ファイル
-    │
-    ▼
-Phase 1: idlj でJavaスタブ生成
-    │
-    ▼
-Phase 2: グローバルスコープスタブの後処理（パッケージ移動）
-    │
-    ▼
-Phase 3: Spring Boot プロジェクトの生成
-    │
-    ▼
-生成された Spring Boot プロジェクト
+  │ 1. IdlScanner     #include をたどり、#pragma prefix と module 名を読む
+  │ 2. IdljRunner     idlj で Java スタブを生成
+  │ 3. StubRelocator  デフォルトパッケージに出たスタブを名前付きパッケージへ移す
+  │ 4. StubIndex      スタブを一度だけパースして索引化
+  │    StubModel      サービス・操作・引数・構造体のモデルを作る（型は CorbaType に分類）
+  │ 5. SpringBootProjectGenerator と各ライター
+  ▼
+Spring Boot プロジェクト
 ```
 
-処理は2つのクラスに分かれています。
+## パッケージとクラス構成
 
-- **`Main.java`** — CLI エントリポイント。引数の解析・idlj 実行・スタブ後処理・サービス検出を担当
-- **`SpringBootProjectGenerator.java`** — スタブ情報を元に Spring Boot プロジェクト一式を生成する
+```
+com.toru_otsuki.bridge_generator   入口と全体の流れ
+├─ idl    IDL の読み取りと idlj の起動（工程 1・2）
+├─ stub   スタブの再配置・索引・モデル・型の分類（工程 3・4）
+└─ gen    Spring Boot プロジェクトの生成（工程 5）
+```
+
+依存の向きは `bridge_generator → idl / stub / gen`、`gen → stub` です。`gen` は JavaParser の構文木に触れず、`stub` のモデルだけを使います。
+
+| パッケージ | クラス | 役割 |
+|---|---|---|
+| (ルート) | `Main` | エントリポイント。引数の誤りは終了コード 2、生成の失敗は 1 |
+| | `CliOptions` | コマンドライン引数の解析と usage |
+| | `BridgeGenerator` | 1〜5 の全工程を順に実行する |
+| | `GenerationException` | 利用者にそのまま見せるエラー |
+| `idl` | `IdlScanner` | IDL を正規表現で読み、`#pragma prefix` と `-pkgPrefix` の対象名を返す |
+| | `IdljRunner` | idlj を argfile 経由で起動する |
+| `stub` | `StubRelocator` | デフォルトパッケージのスタブ移動と import の整合 |
+| | `StubFiles` | スタブファイルの列挙・並列処理・コピー |
+| | `StubIndex` | スタブの構文木の索引。サービス（`*Operations`）と構造体の列挙、完全修飾名での検索 |
+| | `StubModel` | `Service` / `Operation` / `Param` / `Struct` / `Field` のモデルと、その組み立て |
+| | `CorbaType` | 型の分類（プリミティブ / String / Any / 名前付きの型 / 配列） |
+
+以下はすべて `gen` パッケージです。
+
+| クラス | 役割 |
+|---|---|
+| `TypeMapping` | 型ごとの DTO 型・CORBA 型・相互変換式 |
+| `GenSettings` / `GenContext` | 生成全体の設定 / 1 プロジェクト分の出力先 |
+| `SpringBootProjectGenerator` | プロジェクト単位の生成手順 |
+| `ProjectScaffolder` | build.gradle・Application・ServletInitializer |
+| `DtoGenerator` / `MapperGenerator` | 構造体ごとの `XxxDto` / `XxxMapper` |
+| `AnyTypeWriter` / `StringMapperWriter` | `AnyValue`・`AnyMapper` / `StringMapper` |
+| `ServiceDtoWriter` | 操作ごとの `RequestDto`・`RpcRequest`・`RpcResult`・`RpcResponse` と application.yml |
+| `CorbaClientWriter` | IOR からサービスに接続し、操作を委譲する `CorbaClient` |
+| `ControllerWriter` / `ControllerMethodBuilder` | `@RestController` と操作ごとの `POST /操作名` |
 
 ---
 
-## Main.java の動作フロー
+## 1. IDL の静的解析（IdlScanner）
 
-### エントリポイント: `main(String[] args)`
+`#include "..."` を、そのファイルからの相対パスで再帰的にたどって関連ファイルを集めます。循環参照と存在しないファイルはスキップします。
 
-`gen-spring` コマンドを受け取ってから終了するまでの全体フローを制御します。
+- `#pragma prefix "..."`: 関連ファイル中で最初に見つかった値。複数の IDL を渡した場合は、最初に値が見つかった IDL のものを使います。AnyMapper のリポジトリ ID に使います。
+- `-pkgPrefix` の対象: `module` 名（重複除外・出現順）。module が無ければトップレベルの `interface` / `struct` / `union` / `enum` / `exception` の名前。
 
-```
-main()
- ├─ 引数パース（--stub-root, --output-root, --base-package 等）
- │
- ├─ IDL ファイルごとに:
- │    ├─ collectIdlPackagePrefixTargets(idlFile)  → pkgPrefix ターゲット収集
- │    └─ runIdlj(idljJar, idlFile, stubRoot, ...)  → Javaスタブ生成
- │
- ├─ relocateDefaultPackageStubs(stubRoot, idlPackagePrefix)  → スタブ後処理
- │
- ├─ collectServiceInterfaces(stubRoot)  → *Operations インターフェースを収集
- │
- └─ (--single-project)
-       ├─ true:  SpringBootProjectGenerator.generateAll(services, ...)
-       └─ false: サービスごとに SpringBootProjectGenerator.generate(service, ...)
-```
+## 2. idlj の実行（IdljRunner）
 
----
+`java -jar tools/idlj.jar -emitAll -I <IDLのディレクトリ> -fclient [-pkgPrefix <対象> <prefix>]... -td <stubRoot> <IDL>` を実行します。IDL が多いとコマンド長の上限を超えるため、引数は `stubRoot/idlj-args/<IDL名>.args` に書き出し `java @argfile` で渡します。
 
-### Phase 1: Javaスタブ生成
+## 3. スタブの再配置（StubRelocator）
 
-#### `collectIdlPackagePrefixTargets(idlFile)` → `List<String>`
+グローバルスコープで定義した型（`typedef sequence` など）は idlj が `stubRoot` 直下（無名パッケージ）に出力し、名前付きパッケージから import できません。そこで次の処理をします。
 
-IDL ファイルおよびそれが `#include` で参照するファイルを再帰的に解析し、`idlj -pkgPrefix` に渡すターゲット名を収集します。
+1. 移動先パッケージを決める: `--idl-package-prefix` → 既存スタブの package 宣言の共通プレフィックス → `generated` の順。
+2. 直下の `.java` に package 宣言を付けて移動先へ移す。
+3. 全スタブについて、1 ファイルにつき 1 回の読み書きで次を順に適用する（`ImportFixer`）。
+   - `import Foo;` を `import 移動先.Foo;` に書き換える（移動先と同じパッケージなら削除）。
+   - import せずにクラス名だけで参照しているファイルに、完全修飾 import を足す。
+   - 残ったパッケージ無しの `import X;` を削除する。
 
-1. `collectIncludedFiles(file, collected)` を呼び出して対象 IDL ファイルの推移的閉包を構築する
-2. 全ファイルから `module <name>` を正規表現で抽出する
-3. module が見つからない場合のフォールバック: `interface` / `struct` / `union` / `enum` / `exception` の型名を収集する
+実際の IDL ではグローバル型が 1 万近くになるため、「ファイル数 × クラス数」の検索にならないよう、ファイル中の import 文や識別子から逆に引いています。ファイル単位の処理は並列に実行します。
 
-#### `collectIncludedFiles(file, collected)`
+## 4. スタブのモデル化（StubIndex・StubModel・CorbaType）
 
-`#include "..."` を再帰的に辿り、参照されるすべての IDL ファイルを `collected` に追加します。循環参照・存在しないファイルは安全にスキップします。
+スタブを一度だけ並列にパースし、以降は構文木ではなくモデルを使います。
 
-#### `runIdlj(idljJar, idlFile, stubRoot, idlPackagePrefix, packageTargets)`
+- **サービス**: 名前が `Operations` で終わるインターフェース。サービス名は `Operations` を除いたもの。
+- **構造体**: interface でなく、名前が Helper / Holder / Operations / POA / Stub で終わらず、`_` で始まらず、メソッドを持たないクラス。
+- **型の解決**: JavaParser はシンボル解決をしないので、単純名はそのファイルの import 文から逆引きし、見つからなければ同じパッケージとみなします。
+- **out / inout 引数**: 型の単純名が `Holder` で終わる引数。`value` の型は、CORBA 標準の Holder（`IntHolder` など）は固定の対応で、IDL 由来の Holder はスタブの `value` フィールドから求めます（sequence の typedef は `Tag value[]` のように配列になるため）。
 
-idlj をサブプロセスとして実行してJavaスタブを生成します。
+型は `CorbaType` の 5 種類に分類します。
 
-- `stubRoot/idlj-args/<basename>.args` に argfile を書き出し、`java @argfile` で idlj を起動する（スペースを含むパスの問題を回避）
-- `-emitAll`（すべての型を出力）、`-fclient`（クライアント側のみ生成）を常に指定する
-- `idlPackagePrefix` が指定されている場合、`packageTargets` の各名前に対して `-pkgPrefix <name> <prefix>` を追加する
+| 分類 | 例 | DTO 側の型 | CORBA → DTO | DTO → CORBA |
+|---|---|---|---|---|
+| `Primitive` | `int`, `long` | 同じ | そのまま | そのまま |
+| `Str` | `String` | `String` | `StringMapper.encode` | `StringMapper.decode` |
+| `AnyType` | `org.omg.CORBA.Any` | `AnyValue` | `AnyMapper.toAnyValue` | `AnyMapper.toAny` |
+| `Named` | `Coverage.Tag` | `TagDto` | `TagMapper.toDto` | `TagMapper.fromDto` |
+| `ArrayOf` | `Tag[]`, `String[][]` | 要素の DTO 型の配列 | 要素ごとに変換（`Arrays.stream`、入れ子はラムダ） | 同左 |
 
----
+String は、CORBA サーバーが ISO-8859-1 として送ってくる SJIS バイト列を読み替えるため、`--return-mode` によらず常に変換します。`--return-mode=raw` のときは、戻り値と out 引数の Any と名前付きの型を変換せず CORBA 型のまま返します（リクエスト側は常に DTO です）。
 
-### Phase 2: グローバルスコープスタブの後処理
+この規則は `TypeMapping` の 1 か所だけで定義し、構造体 Mapper・Controller・RequestDto/RpcResult のすべてがそれを使います。
 
-#### `relocateDefaultPackageStubs(stubRoot, idlPackagePrefix)`
+## 5. Spring Boot プロジェクトの生成
 
-IDL のグローバルスコープ（モジュール外）で定義された型は、idlj がデフォルトパッケージ（`stubRoot` 直下）に `.java` を出力します。このメソッドはそれらを名前付きパッケージへ移動し、全スタブの import 文を整合させます。
-
-移動先パッケージの決定は `resolveGlobalStubPackage()` に委譲します。
-
-処理は3つのパスに分かれます:
-
-**Pass 1** — import 文の書き換え  
-`stubRoot` 以下の全 `.java` ファイルをスキャンし、移動したクラスへの `import ClassName;`（ドットなし）を書き換えます。
-- 移動先パッケージ内のファイル: 同一パッケージになるため import 行を**削除**
-- 移動先パッケージ外のファイル: `import <targetPackage>.ClassName;` に**書き換え**
-
-**Pass 2** — import の追記  
-idlj はデフォルトパッケージのクラスを「同一パッケージ」として扱うため、import 文なしで参照しているファイルがあります。Pass 1 後に再度スキャンし、クラス名を参照しているにも関わらず import がないファイルへ `insertImport()` で import を追加します。
-
-**Pass 3** — bare import の削除  
-`import Xxx;`（ドットなし）形式の import を全スタブから削除します。リロケーション後はデフォルトパッケージに何も存在しないため、残留する bare import はすべてコンパイルエラーの原因になります。
-
-#### `resolveGlobalStubPackage(stubRoot, idlPackagePrefix, excludeFiles)` → `String`
-
-グローバルスタブの移動先パッケージを次の優先順位で決定します:
-
-1. `idlPackagePrefix` が空でなければそれを使用
-2. 既存スタブの `package` 宣言を収集し、`packageCommonPrefix()` で共通プレフィックスを求める
-3. 共通プレフィックスが得られなければ `"generated"` を使用
-
-#### `insertImport(content, importStatement)` → `String`
-
-`package` 宣言行の直後に import 文を挿入するヘルパーです。
-
-#### `packageCommonPrefix(a, b)` → `String`
-
-`"com.example.a"` と `"com.example.b"` → `"com.example"` のように、ドット区切りパッケージ名の共通プレフィックスを返します。
-
----
-
-### Phase 3: サービス検出
-
-#### `collectServiceInterfaces(stubRoot)` → `List<ClassOrInterfaceDeclaration>`
-
-`stubRoot` 以下の全 `.java` ファイルを JavaParser でパースし、名前が `*Operations` で終わるインターフェース宣言を収集します。これが CORBA サービスインターフェースの識別子になります。
-
----
-
-## SpringBootProjectGenerator.java の動作フロー
-
-### Public API
-
-#### `generate(serviceIface, stubSourceRoot, outputDir, basePkgName, returnAsDto)`
-
-単一サービスを1プロジェクトに生成します。
+`--single-project` なら全サービスを 1 プロジェクト（`<output-root>/<project-name>`）に、そうでなければサービスごとに `<output-root>/<サービス名>Api` を生成します。
 
 ```
-generate()
- ├─ setupProject()                  → プロジェクト共通部分の生成
- ├─ generateService(..., "CorbaClient")  → サービス固有ファイルの生成
- └─ writeApplicationProperties()   → application.yml の出力
+setupProject（プロジェクトごとに 1 回）
+ ├─ build.gradle / Application.java / ServletInitializer.java
+ ├─ スタブ一式をコピー（並列）
+ ├─ dto/AnyValue.java、mapper/AnyMapper.java、mapper/StringMapper.java
+ └─ 構造体ごとに dto/XxxDto.java、mapper/XxxMapper.java
+generateService（サービスごと。操作が無ければ何もしない）
+ ├─ 操作ごとに dto/XxxRequestDto・XxxRpcRequest・XxxRpcResult・XxxRpcResponse
+ ├─ corba/CorbaClient.java（単一プロジェクト時は <サービス名>CorbaClient.java）
+ └─ controller/<サービス名>Controller.java
+application.yml（corba.<サービス名>.ior の欄をサービスごとに出力）
 ```
 
-#### `generateAll(services, stubSourceRoot, outputDir, basePkgName, returnAsDto)`
+### 生成される Controller の動き
 
-複数サービスを1プロジェクトにまとめます。
+1. `POST /操作名` で `XxxRpcRequest` を受け取り、`req = rpc.params` とする。
+2. in 引数を DTO → CORBA に変換し、out 引数には空の Holder を用意する。
+3. `CorbaClient` 経由で呼び出す。
+4. 戻り値と各 `Holder.value` を変換して `XxxRpcResult`（戻り値は `@JsonProperty("return")`）に詰め、`XxxRpcResponse`（`jsonrpc: "2.0"`, `id: 1`）で返す。
 
-```
-generateAll()
- ├─ setupProject()                  → プロジェクト共通部分（1回だけ実行）
- ├─ サービスごとに:
- │    └─ generateService(..., serviceName+"CorbaClient")
- └─ writeApplicationProperties()   → 全サービス分の application.yml
-```
+### AnyMapper
 
----
+`toAnyValue` は TypeCode の種類ごとに値を取り出します。struct は、生成時に構造体ごとに登録した `IDL:<#pragma prefix>/<モジュール>/<名前>:1.0` のリポジトリ ID で Helper と Mapper を引きます。構造体が多いと 1 メソッドが JVM の 64KB 上限を超えるため、登録処理は 50 件ずつのメソッドに分けます。
 
-### プロジェクト共通部分の生成
+## テスト
 
-#### `setupProject(stubSourceRoot, outputDir, basePkgName)` → `ProjectLayout`
+`./gradlew test` で次を実行します。網羅用 IDL は `src/test/resources/idl/coverage.idl` です。
 
-ディレクトリの作成と、全サービスで共有されるファイル群を出力します。
+| テスト | 内容 |
+|---|---|
+| `GoldenTest` | 網羅用 IDL から生成したプロジェクト（idlj スタブのコピーを除く）を `src/test/resources/golden/` と比較 |
+| `GeneratedCodeCompilesTest` | 生成したソースを spring-web・spring-context・jackson-annotations・CORBA API だけをクラスパスにしてコンパイル |
+| `CliOptionsTest` / `IdlScannerTest` / `StubRelocatorTest` / `TypeMappingTest` | 各部品の単体テスト |
 
-```
-setupProject()
- ├─ ディレクトリ作成:
- │    controller/, dto/, mapper/, corba/, resources/
- │
- ├─ writeBuildGradle()          → build.gradle
- ├─ writeApplicationClass()     → Application.java (@SpringBootApplication)
- ├─ writeServletClass()         → ServletInitializer.java
- ├─ copyIdlStubSources()        → スタブをプロジェクトへコピー
- ├─ writeAnyValueDto()          → dto/AnyValue.java
- ├─ writeAnyMapper()            → mapper/AnyMapper.java
- │
- ├─ collectStructClasses()      → 構造体クラスの収集
- └─ 構造体ごとに:
-      ├─ DtoGenerator.generate()    → XxxDto.java
-      └─ MapperGenerator.generate() → XxxMapper.java
-```
-
-返値の `ProjectLayout` は `javaDir`, `controllerDir`, `corbaDir`, `stubSourceRoot` を保持し、後続の `generateService()` に渡されます。
-
----
-
-### サービス固有ファイルの生成
-
-#### `generateService(serviceIface, serviceName, layout, basePkgName, returnAsDto, clientClassName)`
-
-1つのサービスに対応するファイル群を生成します。
-
-```
-generateService()
- ├─ サービスパッケージを取得（JavaParser の CompilationUnit から）
- ├─ メソッドごとに:
- │    ├─ generateRequestDto()    → XxxRequestDto.java（in引数のみフィールド化）
- │    └─ (out引数があれば)
- │         └─ generateResponseDto() → XxxResponseDto.java
- │
- ├─ writeCorbaClient()           → corba/XxxCorbaClient.java
- └─ writeController()            → controller/XxxController.java
-```
-
----
-
-### ファイル生成の詳細
-
-#### `writeBuildGradle(outputDir)`
-
-Spring Boot 4.0.6、glassfish-corba-orb 4.2.5、springdoc-openapi 等の依存を含む `build.gradle` を出力します。
-
-#### `writeApplicationClass(basePkgName, pkgBaseDir)`
-
-`@SpringBootApplication` アノテーション付きの `Application.java` を生成します。gmbal の警告を抑制するシステムプロパティ設定も含みます。
-
-#### `writeServletClass(basePkgName, pkgBaseDir)`
-
-WAR デプロイ用の `ServletInitializer.java` を生成します。
-
-#### `copyIdlStubSources(stubSourceRoot, javaDir)`
-
-idlj が生成したスタブファイルを、相対パスを維持してプロジェクトの `src/main/java/` へコピーします。
-
-#### `writeAnyValueDto(dtoDir, basePkgName)`
-
-`org.omg.CORBA.Any` の代替として JSON でやり取りするための DTO クラス `AnyValue`（`type: String`, `value: Object`）を出力します。
-
-#### `writeAnyMapper(mapperDir, basePkgName)`
-
-`org.omg.CORBA.Any` ↔ `AnyValue` を相互変換するユーティリティクラス `AnyMapper` を出力します。
-
-- `toAny(AnyValue dto)`: `dto.type` の文字列に従って適切な `any.insert_xxx()` を呼び出す
-- `toAnyValue(Any any)`: `TCKind` に従って `any.extract_xxx()` を呼び出す。`tk_null` / `tk_void` の場合は `null` を返す（空 Any でのエラーを防ぐ）
-
-#### `writeCorbaClient(serviceName, servicePackage, methods, corbaDir, basePackage, clientClassName)`
-
-CORBA サービス呼び出しをラップする Spring Bean を生成します。
-
-```java
-@Component
-public class XxxCorbaClient {
-    private final XxxService service;
-
-    // ORB 初期化はコンストラクター（アプリ起動時）に1回だけ実行される
-    public XxxCorbaClient(@Value("${corba.XxxService.ior}") String ior) {
-        ORB orb = ORB.init(new String[0], null);
-        org.omg.CORBA.Object obj = orb.string_to_object(ior);
-        this.service = XxxServiceHelper.narrow(obj);
-    }
-
-    // サービスのメソッドをそのまま委譲するラッパーメソッド群
-    public ReturnType methodName(ParamType param) {
-        return service.methodName(param);
-    }
-}
-```
-
-`@Value("${corba.<serviceName>.ior}")` で `application.yml` から IOR 文字列を受け取ります。ORB 接続はアプリ起動時に1度だけ確立され、リクエストごとに再接続しません。
-
-#### `writeController(serviceName, servicePackage, methods, controllerDir, basePackage, returnAsDto, stubRoot, clientClassName)`
-
-`@RestController` クラスを生成します。CorbaClient をコンストラクターインジェクションで受け取り、各メソッドへの呼び出しを委譲します。
-
-メソッドコードの組み立ては `appendControllerMethod()` に委譲します。
-
-#### `writeApplicationProperties(outputDir, List<String> serviceNames)`
-
-`src/main/resources/application.yml` を生成します。サービスごとに IOR 設定のプレースホルダーを出力します。
-
-```yaml
-corba:
-  XxxService:
-    ior:
-  YyyService:
-    ior:
-```
-
----
-
-### コントローラーメソッドのコード生成
-
-#### `appendControllerMethod(sb, method, basePackage, dtoPackage, servicePackage, returnAsDto, stubRoot)`
-
-コントローラーの1メソッド分のコードを生成します。out引数（Holder型）の有無で2つのパスに分かれます。
-
-**out引数なしの場合:**
-```
-POST /<methodName>
-    → RequestDto を受け取り
-    → in引数を CORBA 型へ変換（appendInArgConversion）
-    → client.methodName() を呼び出し
-    → 戻り値を返す（appendDirectReturn）
-```
-
-**out引数ありの場合:**
-```
-POST /<methodName>
-    → RequestDto を受け取り
-    → in引数を CORBA 型へ変換（appendInArgConversion）
-    → out引数は空 Holder を生成
-    → client.methodName() を呼び出し
-    → callResult と Holder.value を ResponseDto に詰める（appendOutParamResponseDto）
-```
-
-#### `appendInArgConversion(sb, param, argName, handlerName, basePackage, servicePackage, method)`
-
-in引数1つ分の DTO→CORBA 変換コードを生成します。型に応じて4通りの変換を行います:
-
-| 型の種別 | 変換方法 |
-|---------|---------|
-| プリミティブ / String | `req.フィールド` をそのまま代入 |
-| `org.omg.CORBA.Any` | `AnyMapper.toAny(req.フィールド)` |
-| 配列型 | `Arrays.stream(req.xxx).map(XxxMapper::fromDto).toArray(Xxx[]::new)` |
-| 独自型 | `XxxMapper.fromDto(req.フィールド)` |
-
-#### `appendOutParamResponseDto(sb, method, returnType, argNames, ...)`
-
-CORBA 呼び出し後の ResponseDto 構築コードを生成します。`callResult` を `res.returnValue` に、各 `Holder.value` を対応するフィールドに代入します。
-
-#### `appendDirectReturn(sb, method, returnType, callArgs, ...)`
-
-out引数なし・非void メソッドの `return` 文を生成します。プリミティブ/String は直接返し、Any は `AnyMapper.toAnyValue()` を経由し、独自型・配列は `corbaToDtoExpr()` で変換します。
-
----
-
-### DTO/ResponseDto 生成
-
-#### `generateRequestDto(method, outputRoot, basePkgName)`
-
-サービスメソッドの in パラメーター（Holder型を除く）をパブリックフィールドとして持つ `XxxRequestDto` クラスを JavaPoet で生成します。
-
-フィールドの型は `mapToDtoType()` を使って CORBA 型名から DTO 型名に変換します。
-
-#### `generateResponseDto(method, outputRoot, basePkgName, returnAsDto, servicePackage, stubRoot)`
-
-out引数を持つメソッド専用の `XxxResponseDto` クラスを生成します。
-
-- 非void 戻り値 → `returnValue` フィールド
-- 各 out引数 → パラメーター名と同名のフィールド
-
-Holder の value 型の解決には `resolveHolderValueType()` を使用します。
-
----
-
-### 型解決ユーティリティ
-
-#### `resolveTypeFQN(type, method, fallbackPackage)` → `String`
-
-単純型名を完全修飾名（FQN）に解決します。JavaParser でシンボル解決を行わないため、スタブファイルの import 文をスキャンして `.<単純名>` で終わる import を探します。見つからない場合は `fallbackPackage.単純名` を使います。
-
-#### `resolveHolderValueType(holderType, method, fallbackPackage, stubRoot)` → `String`
-
-Holder 型の `value` フィールドの型名を返します。
-
-- CORBA 標準 Holder（`org.omg.CORBA.IntHolder` 等）はハードコードで対応
-- 独自 Holder は `stubRoot` 以下のスタブファイルを JavaParser で解析して `value` フィールドの型を取得する（idlj が sequence typedef に対して生成する配列型 Holder の型を正確に取得するために必要）
-
-#### `corbaToDtoExpr(rhs, valueType, basePackage, dtoPackage, returnAsDto)` → `String`
-
-CORBA 値を DTO へ変換する式（代入右辺として使える文字列）を返します。
-
-- `returnAsDto=false` またはプリミティブ/String: `rhs` をそのまま返す
-- 配列型: `Arrays.stream(rhs).map(XxxMapper::toDto).toArray(XxxDto[]::new)`
-- 独自型: `XxxMapper.toDto(rhs)`
-
-#### `mapToDtoType(basePackage, typeNameString)` → `String`
-
-CORBA 型名を DTO 型名へマッピングします（例: `com.pkg.Foo` → `basePkg.dto.FooDto`、`org.omg.CORBA.Any` → `basePkg.dto.AnyValue`）。配列型は要素型を再帰変換します。
-
-#### `resolveControllerReturnType(method, ...)` → `String`
-
-コントローラーメソッドの戻り型文字列を解決します:
-
-- out引数あり → `XxxResponseDto`
-- void → `Object`（`{"status":"ok"}` を返す）
-- プリミティブ/String → そのまま
-- `org.omg.CORBA.Any` → `returnAsDto=true` なら `AnyValue`、false なら `org.omg.CORBA.Any`
-- 独自型 → `returnAsDto=true` なら `XxxDto`、false なら FQN
-
-#### `convToTypeName(type, dtoPkgName)` → `TypeName`
-
-型名文字列を JavaPoet の `TypeName` へ変換します。`ClassName.bestGuess` は小文字始まりクラス名（例: `pptFoo_struct`）で例外を投げるため、`ClassName.get(pkg, simpleName)` を使って分割変換します。
-
-#### `collectStructClasses(stubSourceRoot)` → `List<ClassOrInterfaceDeclaration>`
-
-スタブから CORBA 構造体クラスを収集します。`isTargetStruct()` でインターフェース・Helper/Holder/POA/Stub・メソッドを持つクラスを除外します。
-
----
-
-### その他のヘルパー
-
-| 関数 | 用途 |
-|-----|-----|
-| `isPrimitiveType(type)` | int/long/…/String をプリミティブ相当として判定（配列は要素型で再帰） |
-| `isHolderType(typeName)` | 単純名が "Holder" で終わるか判定（CORBA out引数の識別） |
-| `toServiceName(serviceIface)` | "Operations" サフィックスを取り除いてサービス名を返す |
-| `simpleName(type)` | FQN から単純名を取り出す（例: `"com.pkg.Foo"` → `"Foo"`） |
-| `stripHolder(fqn)` | `"FooHolder"` → `"Foo"` のように Holder サフィックスを除去する |
-| `capitalize(s)` | 先頭を大文字にする |
-| `isTargetStruct(clazz)` | DTO/Mapper 生成対象の構造体クラスかどうかを判定する |
-
----
-
-## 生成されるプロジェクトの構造
-
-```
-<output>/<ServiceName>Api/
- ├─ build.gradle
- ├─ src/main/resources/
- │   └─ application.yml              ← IOR 設定（起動前に入力が必要）
- └─ src/main/java/<basePkg>/
-     ├─ Application.java             ← @SpringBootApplication
-     ├─ ServletInitializer.java
-     ├─ <idlPackage>/                ← idlj 生成スタブ（コピー）
-     ├─ controller/
-     │   └─ XxxController.java       ← @RestController
-     ├─ corba/
-     │   └─ XxxCorbaClient.java      ← @Component (ORB接続をシングルトンで保持)
-     ├─ dto/
-     │   ├─ AnyValue.java
-     │   ├─ XxxRequestDto.java       ← in引数フィールド
-     │   ├─ XxxResponseDto.java      ← 戻り値 + out引数フィールド（out引数ありのみ）
-     │   └─ YyyDto.java              ← CORBA 構造体の DTO
-     └─ mapper/
-         ├─ AnyMapper.java           ← Any ↔ AnyValue 変換
-         └─ YyyMapper.java           ← CORBA 構造体 ↔ DTO 変換
-```
+生成ロジックを意図して変えたときは、`./gradlew test -Dgolden.update=true` で期待値を更新し、差分をレビューしてからコミットします。

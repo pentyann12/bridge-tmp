@@ -1,0 +1,27 @@
+plugins {
+  id 'java'
+  id 'war'
+  id 'org.springframework.boot' version '4.1.2'
+  id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'generated'
+version = '0.0.1-SNAPSHOT'
+
+java {
+  toolchain {
+    languageVersion = JavaLanguageVersion.of(25)
+  }
+}
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+  implementation 'org.glassfish.corba:glassfish-corba-orb:5.0.3'
+  // glassfish-corba-orb 5.xはgmbalのAPIだけに依存するが、ORBの初期化時に実装を探すため本体も必要
+  runtimeOnly 'org.glassfish.gmbal:gmbal:4.1.2'
+  implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1'
+}
