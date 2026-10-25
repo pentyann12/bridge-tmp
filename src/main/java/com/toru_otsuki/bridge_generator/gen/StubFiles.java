@@ -1,4 +1,4 @@
-package com.toru_otsuki.bridge_generator.stub;
+package com.toru_otsuki.bridge_generator.gen;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -9,16 +9,16 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /// スタブの.javaファイルの列挙・並列処理・コピーを担うユーティリティ
-public final class StubFiles {
+final class StubFiles {
   private StubFiles() {}
 
   /// 1ファイル分の処理
   @FunctionalInterface
-  public interface FileAction {
+  interface FileAction {
     void apply(Path path) throws IOException;
   }
 
-  public static List<Path> javaFiles(Path root) throws IOException {
+  static List<Path> javaFiles(Path root) throws IOException {
     try (Stream<Path> walk = Files.walk(root)) {
       return walk.filter(Files::isRegularFile).filter(p -> p.toString().endsWith(".java")).toList();
     }
@@ -29,7 +29,7 @@ public final class StubFiles {
   /// @param files 対象ファイル
   /// @param action 1ファイル分の処理
   /// @throws IOException いずれかのファイルの処理に失敗した場合
-  public static void forEachParallel(List<Path> files, FileAction action) throws IOException {
+  static void forEachParallel(List<Path> files, FileAction action) throws IOException {
     // 並列ストリームはチェック例外を投げられないので、包んで外で元に戻す
     try {
       files.parallelStream()
@@ -51,7 +51,7 @@ public final class StubFiles {
   /// @param stubSourceRoot スタブのルートディレクトリ
   /// @param javaDir コピー先のJavaソースディレクトリ
   /// @throws IOException コピーに失敗した場合
-  public static void copyIdlStubSources(Path stubSourceRoot, Path javaDir) throws IOException {
+  static void copyIdlStubSources(Path stubSourceRoot, Path javaDir) throws IOException {
     forEachParallel(
         javaFiles(stubSourceRoot),
         p -> {

@@ -1,6 +1,6 @@
 package com.toru_otsuki.bridge_generator.gen;
 
-import com.toru_otsuki.bridge_generator.stub.StubModel;
+import com.toru_otsuki.bridge_generator.model.Struct;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
@@ -43,53 +43,41 @@ final class AnyTypeWriter {
         StandardOpenOption.TRUNCATE_EXISTING);
   }
 
-  /// Javaパッケージ名から`idlj -pkgPrefix`で付与されたプレフィックスを除き、本来のIDLの名前空間を返す
-  ///
-  /// @param classPkg Javaパッケージ名
-  /// @param ctx コード生成コンテキスト
-  /// @return プレフィックスを除いたIDLの名前空間（ドット区切り）
-  private static String toIdlPkg(String classPkg, GenContext ctx) {
-    String prefix = ctx.settings().idlPackagePrefix();
-    if (prefix.isEmpty()) return classPkg;
-    if (classPkg.equals(prefix)) return "";
-    if (classPkg.startsWith(prefix + ".")) return classPkg.substring(prefix.length() + 1);
-    return classPkg;
-  }
-
   /// AnyとAnyValueを相互変換するAnyMapperクラスを出力する
   ///
-  /// 基本型はTypeCodeの種類ごとに値を取り出す。structは種類だけでは中身の型が分からないので、リポジトリID（`IDL:prefix/モジュール/名前:1.0`）から
-  /// Helperで取り出してMapperでDTOにする処理を、構造体ごとに登録する。
+  /// 基本型はTypeCodeの種類（Any → JSON）や`type`の文字列（JSON → Any）で決まる変換をする。structは種類だけでは中身の型が
+  /// 分からないので、構造体ごとに両方向の変換を登録する。
+  ///
+  /// - Any → JSON: リポジトリID（IDLコンパイラが付けた正確な値）で引き、Helperで取り出してMapperでDTOにする。
+  ///   `type`にはIDL上のスコープ付きの名前を入れる。
+  /// - JSON → Any: その`type`で引き、JSONの値をDTOに読み替えてからMapperとHelperでAnyに入れる。
+  ///   そのため、CORBAから返ってきたAnyのJSONをそのまま送り返せる。
+  ///
+  /// sequence・union・objrefなどは、Anyに入れるためのTypeCodeをJSONから組み立てられないので、JSON → Anyでは
+  /// IllegalArgumentExceptionにする。Anyを作るだけなら通信用のORBは要らないので、シングルトンORBを使う。
   ///
   /// @param ctx コード生成コンテキスト
   /// @param structs DTO/Mapperを生成する構造体
   /// @throws IOException ファイルの書き込みに失敗した場合
-  static void writeAnyMapper(GenContext ctx, List<StubModel.Struct> structs) throws IOException {
+  static void writeAnyMapper(GenContext ctx, List<Struct> structs) throws IOException {
     String pkg = ctx.basePackage() + ".mapper";
 
-    // 構造体ごとに「リポジトリID → AnyValueへの変換」を登録するm.put文を作る。AnyValue.typeにはIDLの名前空間付きの型名を入れる
     List<String> entries =
         structs.stream()
             .map(
                 struct -> {
                   String className = struct.name();
-                  String idlPkg = toIdlPkg(struct.pkg(), ctx);
-                  String repoPath =
-                      (ctx.settings().repoIdPrefix().isEmpty()
-                              ? ""
-                              : ctx.settings().repoIdPrefix() + "/")
-                          + (idlPkg.isEmpty() ? "" : idlPkg.replace('.', '/') + "/")
-                          + className;
-                  String typeName = idlPkg.isEmpty() ? className : idlPkg + "." + className;
                   String helperFqn =
                       struct.pkg().isEmpty()
                           ? className + "Helper"
                           : struct.pkg() + "." + className + "Helper";
                   String mapperFqn = pkg + "." + className + "Mapper";
+                  String dtoFqn = ctx.basePackage() + ".dto." + className + "Dto";
                   return """
-                          m.put("IDL:%s:1.0", any -> new AnyValue("%s", %s.toDto(%s.extract(any))));
+                          m.put("%1$s", any -> new AnyValue("%2$s", %3$s.toDto(%4$s.extract(any))));
+                          r.put("%2$s", v -> { Any any = newAny(); %4$s.insert(any, %3$s.fromDto(JSON.convertValue(v, %5$s.class))); return any; });
                       """
-                      .formatted(repoPath, typeName, mapperFqn, helperFqn);
+                      .formatted(struct.repoId(), struct.idlName(), mapperFqn, helperFqn, dtoFqn);
                 })
             .toList();
 
@@ -98,7 +86,9 @@ final class AnyTypeWriter {
     for (int i = 0; i < entries.size(); i += STRUCT_CHUNK) {
       chunkMethods.add(
           """
-            private static void initStructHandlers%d(java.util.Map<String, java.util.function.Function<Any, AnyValue>> m) {
+            private static void initStructHandlers%d(
+                java.util.Map<String, java.util.function.Function<Any, AnyValue>> m,
+                java.util.Map<String, java.util.function.Function<Object, Any>> r) {
           %s  }
           """
               .formatted(
@@ -106,29 +96,23 @@ final class AnyTypeWriter {
                   String.join("", entries.subList(i, Math.min(i + STRUCT_CHUNK, entries.size())))));
     }
 
-    String structHandlersBlock;
-    if (entries.isEmpty()) {
-      structHandlersBlock =
-          """
-            private static final java.util.Map<String, java.util.function.Function<Any, AnyValue>> STRUCT_HANDLERS
-                = java.util.Collections.emptyMap();
-          """;
-    } else {
-      String initCalls =
-          IntStream.range(0, chunkMethods.size())
-              .mapToObj("    initStructHandlers%d(m);\n"::formatted)
-              .collect(Collectors.joining());
-      structHandlersBlock =
-          """
-            private static final java.util.Map<String, java.util.function.Function<Any, AnyValue>> STRUCT_HANDLERS;
-            static {
-              java.util.Map<String, java.util.function.Function<Any, AnyValue>> m = new java.util.HashMap<>();
-          %s    STRUCT_HANDLERS = java.util.Collections.unmodifiableMap(m);
-            }
+    String initCalls =
+        IntStream.range(0, chunkMethods.size())
+            .mapToObj("    initStructHandlers%d(m, r);\n"::formatted)
+            .collect(Collectors.joining());
+    String structHandlersBlock =
+        """
+          private static final java.util.Map<String, java.util.function.Function<Any, AnyValue>> STRUCT_HANDLERS;
+          private static final java.util.Map<String, java.util.function.Function<Object, Any>> STRUCT_INSERTERS;
+          static {
+            java.util.Map<String, java.util.function.Function<Any, AnyValue>> m = new java.util.HashMap<>();
+            java.util.Map<String, java.util.function.Function<Object, Any>> r = new java.util.HashMap<>();
+        %s    STRUCT_HANDLERS = java.util.Collections.unmodifiableMap(m);
+            STRUCT_INSERTERS = java.util.Collections.unmodifiableMap(r);
+          }
 
-          %s"""
-              .formatted(initCalls, String.join("\n", chunkMethods));
-    }
+        %s"""
+            .formatted(initCalls, String.join("\n", chunkMethods));
 
     // 構造体の登録処理は件数で形が変わるので、テンプレート中の//@@STRUCT_HANDLERS@@行を後から差し替える
     String content =
@@ -138,7 +122,6 @@ final class AnyTypeWriter {
         import org.omg.CORBA.Any;
         import org.omg.CORBA.ORB;
         import org.omg.CORBA.TCKind;
-        import org.omg.CORBA.Object;
         import %s.dto.AnyValue;
 
         public final class AnyMapper {
@@ -185,11 +168,15 @@ final class AnyTypeWriter {
 
           //@@STRUCT_HANDLERS@@
 
+          private static final tools.jackson.databind.json.JsonMapper JSON = new tools.jackson.databind.json.JsonMapper();
+
+          private static Any newAny() {
+            return ORB.init().create_any();
+          }
+
           public static Any toAny(AnyValue dto) {
-            Any any = ORB.init(new String[0], null).create_any();
-            if (dto == null) return any;
-            if (dto.type == null) return any;
-            if ("null".equals(dto.type)) return any;
+            Any any = newAny();
+            if (dto == null || dto.type == null || "null".equals(dto.type)) return any;
             switch (dto.type) {
               case "boolean": any.insert_boolean((Boolean) dto.value); break;
               case "short": any.insert_short(((Number) dto.value).shortValue()); break;
@@ -203,15 +190,15 @@ final class AnyTypeWriter {
               case "char": any.insert_char(String.valueOf(dto.value).charAt(0)); break;
               case "wchar": any.insert_wchar(String.valueOf(dto.value).charAt(0)); break;
               case "octet": any.insert_octet(((Number) dto.value).byteValue()); break;
-              case "string": any.insert_string(String.valueOf(dto.value)); break;
+              case "string": any.insert_string(StringMapper.decode(String.valueOf(dto.value))); break;
               case "wstring": any.insert_wstring(String.valueOf(dto.value)); break;
-              case "TypeCode": any.insert_TypeCode((org.omg.CORBA.TypeCode) dto.value); break;
-              case "any": any.insert_any(toAny((AnyValue) dto.value)); break;
-              case "objref": case "union": case "enum": case "sequence": case "array":
-              case "alias": case "except": case "fixed": case "value": case "value_box":
-              case "native": case "abstract_interface":
-                any.insert_Object((Object) dto.value); break;
-              default: any.insert_Object((Object) dto.value); break;
+              case "any": any.insert_any(toAny(JSON.convertValue(dto.value, AnyValue.class))); break;
+              default:
+                java.util.function.Function<Object, Any> inserter = STRUCT_INSERTERS.get(dto.type);
+                if (inserter == null) {
+                  throw new IllegalArgumentException("AnyValue.type「" + dto.type + "」はCORBAのAnyに変換できません");
+                }
+                return inserter.apply(dto.value);
             }
             return any;
           }
@@ -247,7 +234,7 @@ final class AnyTypeWriter {
 
           private static AnyValue extractString(Any any) {
             try {
-              return new AnyValue("string", any.extract_string());
+              return new AnyValue("string", StringMapper.encode(any.extract_string()));
             } catch (Exception e) {
               return new AnyValue("string", null);
             }

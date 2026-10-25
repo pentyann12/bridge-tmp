@@ -5,7 +5,8 @@ import com.palantir.javapoet.CodeBlock;
 import com.palantir.javapoet.JavaFile;
 import com.palantir.javapoet.MethodSpec;
 import com.palantir.javapoet.TypeSpec;
-import com.toru_otsuki.bridge_generator.stub.StubModel;
+import com.toru_otsuki.bridge_generator.model.Field;
+import com.toru_otsuki.bridge_generator.model.Struct;
 import java.io.IOException;
 import javax.lang.model.element.Modifier;
 
@@ -20,7 +21,7 @@ final class MapperGenerator {
   /// @param struct 構造体のモデル
   /// @param ctx コード生成コンテキスト
   /// @throws IOException ファイルの書き込みに失敗した場合
-  static void generate(StubModel.Struct struct, GenContext ctx) throws IOException {
+  static void generate(Struct struct, GenContext ctx) throws IOException {
     TypeMapping types = ctx.types();
     ClassName dtoClass = types.dtoClass(struct.name() + "Dto");
     ClassName corbaClass = ClassName.get(struct.pkg(), struct.name());
@@ -38,7 +39,7 @@ final class MapperGenerator {
             .addParameter(dtoClass, "src")
             .addStatement("$T dst = new $T()", corbaClass, corbaClass);
 
-    for (StubModel.Field field : struct.fields()) {
+    for (Field field : struct.fields()) {
       CodeBlock src = CodeBlock.of("src.$N", field.name());
       toDto.addStatement("dto.$N = $L", field.name(), types.toDto(field.type(), src, true));
       fromDto.addStatement("dst.$N = $L", field.name(), types.fromDto(field.type(), src));

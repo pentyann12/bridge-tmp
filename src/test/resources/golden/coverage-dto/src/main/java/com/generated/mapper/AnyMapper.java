@@ -3,7 +3,6 @@ package com.generated.mapper;
 import org.omg.CORBA.Any;
 import org.omg.CORBA.ORB;
 import org.omg.CORBA.TCKind;
-import org.omg.CORBA.Object;
 import com.generated.dto.AnyValue;
 
 public final class AnyMapper {
@@ -49,23 +48,35 @@ public final class AnyMapper {
   }
 
   private static final java.util.Map<String, java.util.function.Function<Any, AnyValue>> STRUCT_HANDLERS;
+  private static final java.util.Map<String, java.util.function.Function<Object, Any>> STRUCT_INSERTERS;
   static {
     java.util.Map<String, java.util.function.Function<Any, AnyValue>> m = new java.util.HashMap<>();
-    initStructHandlers0(m);
+    java.util.Map<String, java.util.function.Function<Object, Any>> r = new java.util.HashMap<>();
+    initStructHandlers0(m, r);
     STRUCT_HANDLERS = java.util.Collections.unmodifiableMap(m);
+    STRUCT_INSERTERS = java.util.Collections.unmodifiableMap(r);
   }
 
-  private static void initStructHandlers0(java.util.Map<String, java.util.function.Function<Any, AnyValue>> m) {
+  private static void initStructHandlers0(
+      java.util.Map<String, java.util.function.Function<Any, AnyValue>> m,
+      java.util.Map<String, java.util.function.Function<Object, Any>> r) {
     m.put("IDL:toru-otsuki.example/Coverage/Inner/Point:1.0", any -> new AnyValue("Coverage.Inner.Point", com.generated.mapper.PointMapper.toDto(com.corba.Coverage.Inner.PointHelper.extract(any))));
+    r.put("Coverage.Inner.Point", v -> { Any any = newAny(); com.corba.Coverage.Inner.PointHelper.insert(any, com.generated.mapper.PointMapper.fromDto(JSON.convertValue(v, com.generated.dto.PointDto.class))); return any; });
     m.put("IDL:toru-otsuki.example/Coverage/Item:1.0", any -> new AnyValue("Coverage.Item", com.generated.mapper.ItemMapper.toDto(com.corba.Coverage.ItemHelper.extract(any))));
+    r.put("Coverage.Item", v -> { Any any = newAny(); com.corba.Coverage.ItemHelper.insert(any, com.generated.mapper.ItemMapper.fromDto(JSON.convertValue(v, com.generated.dto.ItemDto.class))); return any; });
     m.put("IDL:toru-otsuki.example/Coverage/Tag:1.0", any -> new AnyValue("Coverage.Tag", com.generated.mapper.TagMapper.toDto(com.corba.Coverage.TagHelper.extract(any))));
+    r.put("Coverage.Tag", v -> { Any any = newAny(); com.corba.Coverage.TagHelper.insert(any, com.generated.mapper.TagMapper.fromDto(JSON.convertValue(v, com.generated.dto.TagDto.class))); return any; });
+  }
+
+  private static final tools.jackson.databind.json.JsonMapper JSON = new tools.jackson.databind.json.JsonMapper();
+
+  private static Any newAny() {
+    return ORB.init().create_any();
   }
 
   public static Any toAny(AnyValue dto) {
-    Any any = ORB.init(new String[0], null).create_any();
-    if (dto == null) return any;
-    if (dto.type == null) return any;
-    if ("null".equals(dto.type)) return any;
+    Any any = newAny();
+    if (dto == null || dto.type == null || "null".equals(dto.type)) return any;
     switch (dto.type) {
       case "boolean": any.insert_boolean((Boolean) dto.value); break;
       case "short": any.insert_short(((Number) dto.value).shortValue()); break;
@@ -79,15 +90,15 @@ public final class AnyMapper {
       case "char": any.insert_char(String.valueOf(dto.value).charAt(0)); break;
       case "wchar": any.insert_wchar(String.valueOf(dto.value).charAt(0)); break;
       case "octet": any.insert_octet(((Number) dto.value).byteValue()); break;
-      case "string": any.insert_string(String.valueOf(dto.value)); break;
+      case "string": any.insert_string(StringMapper.decode(String.valueOf(dto.value))); break;
       case "wstring": any.insert_wstring(String.valueOf(dto.value)); break;
-      case "TypeCode": any.insert_TypeCode((org.omg.CORBA.TypeCode) dto.value); break;
-      case "any": any.insert_any(toAny((AnyValue) dto.value)); break;
-      case "objref": case "union": case "enum": case "sequence": case "array":
-      case "alias": case "except": case "fixed": case "value": case "value_box":
-      case "native": case "abstract_interface":
-        any.insert_Object((Object) dto.value); break;
-      default: any.insert_Object((Object) dto.value); break;
+      case "any": any.insert_any(toAny(JSON.convertValue(dto.value, AnyValue.class))); break;
+      default:
+        java.util.function.Function<Object, Any> inserter = STRUCT_INSERTERS.get(dto.type);
+        if (inserter == null) {
+          throw new IllegalArgumentException("AnyValue.type「" + dto.type + "」はCORBAのAnyに変換できません");
+        }
+        return inserter.apply(dto.value);
     }
     return any;
   }
@@ -123,7 +134,7 @@ public final class AnyMapper {
 
   private static AnyValue extractString(Any any) {
     try {
-      return new AnyValue("string", any.extract_string());
+      return new AnyValue("string", StringMapper.encode(any.extract_string()));
     } catch (Exception e) {
       return new AnyValue("string", null);
     }

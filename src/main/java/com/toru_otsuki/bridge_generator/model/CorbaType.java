@@ -1,4 +1,4 @@
-package com.toru_otsuki.bridge_generator.stub;
+package com.toru_otsuki.bridge_generator.model;
 
 /// idljが生成したJava型を、コード生成上の扱いの違いで分類した型モデル
 ///

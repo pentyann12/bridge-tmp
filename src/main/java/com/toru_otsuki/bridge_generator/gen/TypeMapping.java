@@ -4,7 +4,7 @@ import com.palantir.javapoet.ArrayTypeName;
 import com.palantir.javapoet.ClassName;
 import com.palantir.javapoet.CodeBlock;
 import com.palantir.javapoet.TypeName;
-import com.toru_otsuki.bridge_generator.stub.CorbaType;
+import com.toru_otsuki.bridge_generator.model.CorbaType;
 
 /// 型モデル（[CorbaType]）ごとに、DTO側の型・CORBA側の型・相互変換の式を決める
 ///

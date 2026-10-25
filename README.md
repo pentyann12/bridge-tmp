@@ -26,6 +26,7 @@
 - `--base-package`: 生成されるJavaコードのベースパッケージ。
 - `--idl-package-prefix`: IDLファイルのパッケージプレフィックス。これにより、生成されるJavaスタブのパッケージ構造を制御できます。
 - `--return-mode`: サービスインターフェースのメソッドの戻り値の形式を指定します。`raw` を指定すると、IDLで定義された型をそのまま使用します。`dto` を指定すると、戻り値をDTOクラスに変換します。
+- `--string-charset`: CORBAサーバーが文字列に使う文字コード（既定値 `SJIS`。`Windows-31J` などJavaの文字コード名か、読み替えない場合は `none`）。生成アプリの `application.yml` の `corba.string-charset` に書かれ、生成し直さずに設定や起動引数（`--corba.string-charset=...`）で変更できます。
 - `--single-project`: 全サービスを1つのSpring Bootプロジェクトにまとめます。指定しない場合はサービスごとに `<サービス名>Api` プロジェクトを生成します。
 - `--project-name`: `--single-project` 時のプロジェクト名（既定値 `CombinedApi`）。
 - `idl/service.idl`: 解析するIDLファイルのパス。
@@ -43,7 +44,8 @@
 網羅用IDL（`src/test/resources/idl/coverage.idl`）から生成したプロジェクトを期待値（`src/test/resources/golden/`）と比較し、生成したソースが実際にコンパイルできることも確認します。生成ロジックを意図して変えたときは `.\gradlew.bat test -Dgolden.update=true` で期待値を更新し、差分をレビューしてください。
 
 ## 4. 注意点
-- 実行にはJDK 25が必要です。ジェネレータはPATH上の`java`で`tools/idlj.jar`を起動してJavaスタブを生成します（JDK 11以降のJDKには`idlj`が含まれないため同梱しています）。
+- 実行にはJDK 25が必要です。JDK 11以降には`idlj`が含まれないため、ジェネレータはMavenの`org.glassfish.corba:idlj`をライブラリとして同じプロセスで動かし、Javaスタブを生成します。
+- `--idl-package-prefix`を指定しない場合、moduleはIDLの名前のままのパッケージに、グローバルスコープの型は`generated`パッケージに出力されます。
 - 生成されるプロジェクトはSpring Boot 4.1・JDK 25・glassfish-corba-orb 5.0向けです。glassfish-corba-orb 5.0はgmbalの実装を別途必要とするため、生成される`build.gradle`には`org.glassfish.gmbal:gmbal`も含まれます。
 - 生成されたSpring Bootプロジェクトは、サービスインターフェースの定義に基づいて作成されますが、ビジネスロジックやデータアクセスコードは含まれていません。これらは手動で実装する必要があります。
 - 生成されたコードは、プロジェクトの構造や命名規則に基づいていますが、必要に応じてカスタマイズしてください。

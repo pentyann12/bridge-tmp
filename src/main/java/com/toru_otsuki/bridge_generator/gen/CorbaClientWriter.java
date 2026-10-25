@@ -1,6 +1,7 @@
 package com.toru_otsuki.bridge_generator.gen;
 
-import com.toru_otsuki.bridge_generator.stub.StubModel;
+import com.toru_otsuki.bridge_generator.model.Param;
+import com.toru_otsuki.bridge_generator.model.Service;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.stream.Collectors;
@@ -17,8 +18,7 @@ final class CorbaClientWriter {
   /// @param clientClassName 生成するクラスの名前（例: `CorbaClient`、`ItemServiceCorbaClient`）
   /// @param ctx コード生成コンテキスト
   /// @throws IOException ファイルの書き込みに失敗した場合
-  static void write(StubModel.Service service, String clientClassName, GenContext ctx)
-      throws IOException {
+  static void write(Service service, String clientClassName, GenContext ctx) throws IOException {
     TypeMapping types = ctx.types();
     String serviceName = service.name();
     String serviceImports =
@@ -39,9 +39,7 @@ final class CorbaClientWriter {
                           .map(p -> javaType(p, types) + " " + p.name())
                           .collect(Collectors.joining(", "));
                   String args =
-                      op.params().stream()
-                          .map(StubModel.Param::name)
-                          .collect(Collectors.joining(", "));
+                      op.params().stream().map(Param::name).collect(Collectors.joining(", "));
                   String returnType =
                       op.returnType().map(t -> types.corbaType(t).toString()).orElse("void");
                   String call =
@@ -90,7 +88,7 @@ final class CorbaClientWriter {
   /// @param param 引数のモデル
   /// @param types 型の対応付け
   /// @return out/inout引数ならHolder型、in引数ならCORBA側の型（いずれも完全修飾名）
-  static String javaType(StubModel.Param param, TypeMapping types) {
+  static String javaType(Param param, TypeMapping types) {
     return param.isOut() ? param.holderType() : types.corbaType(param.type()).toString();
   }
 }

@@ -18,7 +18,8 @@ repositories {
 }
 
 dependencies {
-	implementation 'com.github.javaparser:javaparser-core:3.28.2'
+	// IDLの解析とスタブ生成（idljのフロントエンドを同じプロセスで使う）
+	implementation 'org.glassfish.corba:idlj:5.0.3'
 	implementation 'com.palantir.javapoet:javapoet:0.22.0'
 
 	testImplementation platform('org.junit:junit-bom:6.1.3')
@@ -28,6 +29,7 @@ dependencies {
 	testImplementation 'org.springframework:spring-web:7.0.10'
 	testImplementation 'org.springframework:spring-context:7.0.10'
 	testImplementation 'com.fasterxml.jackson.core:jackson-annotations:2.21'
+	testImplementation 'tools.jackson.core:jackson-databind:3.1.7'
 	testImplementation 'org.glassfish.corba:glassfish-corba-omgapi:5.0.3'
 }
 

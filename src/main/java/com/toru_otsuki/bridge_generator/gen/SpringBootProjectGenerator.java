@@ -1,7 +1,8 @@
 package com.toru_otsuki.bridge_generator.gen;
 
-import com.toru_otsuki.bridge_generator.stub.StubFiles;
-import com.toru_otsuki.bridge_generator.stub.StubModel;
+import com.toru_otsuki.bridge_generator.model.Operation;
+import com.toru_otsuki.bridge_generator.model.Service;
+import com.toru_otsuki.bridge_generator.model.Struct;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,7 +20,7 @@ public final class SpringBootProjectGenerator {
   /// @param outputDir 生成するSpring Bootプロジェクトの出力ディレクトリ
   /// @param settings コード生成全体の設定
   /// @throws IOException ファイルの書き込みに失敗した場合
-  public static void generate(StubModel.Service service, Path outputDir, GenSettings settings)
+  public static void generate(Service service, Path outputDir, GenSettings settings)
       throws IOException {
     GenContext ctx = setupProject(outputDir, settings);
     generateService(service, ctx, "CorbaClient");
@@ -33,14 +34,13 @@ public final class SpringBootProjectGenerator {
   /// @param outputDir 生成するSpring Bootプロジェクトの出力ディレクトリ
   /// @param settings コード生成全体の設定
   /// @throws IOException ファイルの書き込みに失敗した場合
-  public static void generateAll(
-      List<StubModel.Service> services, Path outputDir, GenSettings settings) throws IOException {
+  public static void generateAll(List<Service> services, Path outputDir, GenSettings settings)
+      throws IOException {
     GenContext ctx = setupProject(outputDir, settings);
-    for (StubModel.Service service : services) {
+    for (Service service : services) {
       generateService(service, ctx, service.name() + "CorbaClient");
     }
-    ServiceDtoWriter.writeApplicationProperties(
-        ctx, services.stream().map(StubModel.Service::name).toList());
+    ServiceDtoWriter.writeApplicationProperties(ctx, services.stream().map(Service::name).toList());
   }
 
   /// プロジェクトの共通部分（ディレクトリ・ビルドファイル・共有クラス・スタブ・構造体のDTO/Mapper）を生成する
@@ -68,7 +68,7 @@ public final class SpringBootProjectGenerator {
     AnyTypeWriter.writeAnyValueDto(ctx);
     AnyTypeWriter.writeAnyMapper(ctx, settings.structs());
     StringMapperWriter.write(ctx);
-    for (StubModel.Struct struct : settings.structs()) {
+    for (Struct struct : settings.structs()) {
       DtoGenerator.generate(struct, ctx);
       MapperGenerator.generate(struct, ctx);
     }
@@ -81,10 +81,10 @@ public final class SpringBootProjectGenerator {
   /// @param ctx コード生成コンテキスト
   /// @param clientClassName 生成するCorbaClientクラスの名前
   /// @throws IOException ファイルの書き込みに失敗した場合
-  private static void generateService(
-      StubModel.Service service, GenContext ctx, String clientClassName) throws IOException {
+  private static void generateService(Service service, GenContext ctx, String clientClassName)
+      throws IOException {
     if (service.operations().isEmpty()) return;
-    for (StubModel.Operation op : service.operations()) {
+    for (Operation op : service.operations()) {
       ServiceDtoWriter.generateRequestDto(op, ctx);
       ServiceDtoWriter.generateRpcResponse(op, ctx);
     }

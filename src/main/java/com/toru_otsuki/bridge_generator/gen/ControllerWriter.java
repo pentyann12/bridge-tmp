@@ -1,6 +1,6 @@
 package com.toru_otsuki.bridge_generator.gen;
 
-import com.toru_otsuki.bridge_generator.stub.StubModel;
+import com.toru_otsuki.bridge_generator.model.Service;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.stream.Collectors;
@@ -15,8 +15,7 @@ final class ControllerWriter {
   /// @param clientClassName CorbaClientクラスの名前
   /// @param ctx コード生成コンテキスト
   /// @throws IOException ファイルの書き込みに失敗した場合
-  static void write(StubModel.Service service, String clientClassName, GenContext ctx)
-      throws IOException {
+  static void write(Service service, String clientClassName, GenContext ctx) throws IOException {
     String controllerName = service.name() + "Controller";
     String clientFqn = ctx.basePackage() + ".corba." + clientClassName;
 

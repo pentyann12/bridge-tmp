@@ -1,4 +1,6 @@
 corba:
+  # CORBAサーバーが文字列に使う文字コード（noneなら読み替えない）
+  string-charset: SJIS
   EmptyService:
     ior:
   ItemService:

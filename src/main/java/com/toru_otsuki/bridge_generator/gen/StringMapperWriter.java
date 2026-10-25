@@ -11,7 +11,11 @@ final class StringMapperWriter {
 
   /// StringMapperクラスを出力する
   ///
-  /// CORBAサーバーはSJISのバイト列をISO-8859-1の文字列として受け渡すので、`encode`で受け取った文字列をSJISとして読み直し、`decode`でその逆を行う。
+  /// CORBAサーバーは自分の文字コード（SJISなど）のバイト列をISO-8859-1の文字列として受け渡すので、`encode`で受け取った文字列を
+  /// その文字コードで読み直し、`decode`でその逆を行う。
+  ///
+  /// 文字コードは生成し直さずに変えられるよう、application.ymlの`corba.string-charset`から読む。Mapperは静的メソッドで呼ばれるので、
+  /// StringMapper自身をBeanにして、起動時に設定値を静的フィールドへ移す。設定が無いときやSpringの外では生成時の指定を使う。
   ///
   /// @param ctx コード生成コンテキスト
   /// @throws IOException ファイルの書き込みに失敗した場合
@@ -21,33 +25,39 @@ final class StringMapperWriter {
 
     String content =
         """
-        package %s.mapper;
+        package %1$s.mapper;
 
+        import java.nio.charset.Charset;
         import java.nio.charset.StandardCharsets;
+        import org.springframework.beans.factory.annotation.Value;
+        import org.springframework.stereotype.Component;
 
+        @Component
         public final class StringMapper {
-          private StringMapper() {}
+          private static volatile Charset charset = toCharset("%2$s");
+
+          public StringMapper(@Value("${corba.string-charset:%2$s}") String charsetName) {
+            charset = toCharset(charsetName);
+          }
+
+          private static Charset toCharset(String name) {
+            return name.isBlank() || name.equalsIgnoreCase("none") ? null : Charset.forName(name.strip());
+          }
 
           public static String encode(String text) {
-            if (text == null) return null;
-            try {
-              return new String(text.getBytes(StandardCharsets.ISO_8859_1), "SJIS");
-            } catch (java.io.UnsupportedEncodingException e) {
-              return text;
-            }
+            Charset cs = charset;
+            if (text == null || cs == null) return text;
+            return new String(text.getBytes(StandardCharsets.ISO_8859_1), cs);
           }
 
           public static String decode(String text) {
-            if (text == null) return null;
-            try {
-              return new String(text.getBytes("SJIS"), StandardCharsets.ISO_8859_1);
-            } catch (java.io.UnsupportedEncodingException e) {
-              return text;
-            }
+            Charset cs = charset;
+            if (text == null || cs == null) return text;
+            return new String(text.getBytes(cs), StandardCharsets.ISO_8859_1);
           }
         }
         """
-            .formatted(ctx.basePackage());
+            .formatted(ctx.basePackage(), ctx.settings().stringCharset());
     Files.writeString(
         target, content, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
   }

@@ -25,7 +25,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 /// 生成したプロジェクトのJavaソースが実際にコンパイルできることを確かめる
 ///
 /// 起動クラス（Application・ServletInitializer）以外の全ソース（スタブ・DTO・Mapper・CorbaClient・Controller）を、
-/// 生成コードが使うAPI（spring-web・spring-context・jackson-annotations・CORBA API）だけをクラスパスに載せてコンパイルする。
+/// 生成コードが使うAPI（spring-web・spring-context・Jackson・CORBA API）だけをクラスパスに載せてコンパイルする。
 class GeneratedCodeCompilesTest {
   /// Spring Bootの依存が要るためコンパイル対象から外すファイル
   private static final Set<String> SPRING_BOOT_ONLY =

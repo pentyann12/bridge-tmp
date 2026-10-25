@@ -1,8 +1,9 @@
 package com.toru_otsuki.bridge_generator.gen;
 
 import com.palantir.javapoet.CodeBlock;
-import com.toru_otsuki.bridge_generator.stub.CorbaType;
-import com.toru_otsuki.bridge_generator.stub.StubModel;
+import com.toru_otsuki.bridge_generator.model.CorbaType;
+import com.toru_otsuki.bridge_generator.model.Operation;
+import com.toru_otsuki.bridge_generator.model.Param;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -20,7 +21,7 @@ final class ControllerMethodBuilder {
   /// @param op 操作のモデル
   /// @param ctx コード生成コンテキスト
   /// @return `POST /操作名`を受けるメソッドのソースコード
-  static String build(StubModel.Operation op, GenContext ctx) {
+  static String build(Operation op, GenContext ctx) {
     String dtoPackage = ctx.dtoPackage();
     String cap = op.capitalizedName();
     String rpcRequest = dtoPackage + "." + cap + "RpcRequest";
@@ -46,7 +47,7 @@ final class ControllerMethodBuilder {
     TypeMapping types = ctx.types();
     List<String> argNames = new ArrayList<>();
     StringBuilder argConversions = new StringBuilder();
-    for (StubModel.Param param : op.params()) {
+    for (Param param : op.params()) {
       String argName = "arg" + argNames.size();
       argNames.add(argName);
       String javaType = CorbaClientWriter.javaType(param, types);
@@ -84,7 +85,7 @@ final class ControllerMethodBuilder {
   /// @param ctx コード生成コンテキスト
   /// @return メソッド本体のうち、呼び出し以降のコード
   private static String outParamResponse(
-      StubModel.Operation op,
+      Operation op,
       String call,
       List<String> argNames,
       String rpcResult,
@@ -98,7 +99,7 @@ final class ControllerMethodBuilder {
                 assignments.add(
                     "__result.returnValue = " + toDto(t, CodeBlock.of("callResult"), ctx)));
     for (int i = 0; i < op.params().size(); i++) {
-      StubModel.Param param = op.params().get(i);
+      Param param = op.params().get(i);
       if (!param.isOut()) continue;
       assignments.add(
           "__result.%s = %s"

@@ -22,6 +22,7 @@ class CliOptionsTest {
     assertEquals("com.generated", o.basePackage());
     assertEquals("", o.idlPackagePrefix());
     assertTrue(o.returnAsDto());
+    assertEquals("SJIS", o.stringCharset());
     assertFalse(o.singleProject());
     assertEquals("CombinedApi", o.projectName());
     assertFalse(o.help());
@@ -37,6 +38,7 @@ class CliOptionsTest {
             "--base-package=com.bridge",
             "--idl-package-prefix=com.corba",
             "--return-mode=RAW",
+            "--string-charset=Windows-31J",
             "--single-project",
             "--project-name=Bridge",
             "a.idl",
@@ -47,6 +49,7 @@ class CliOptionsTest {
     assertEquals("com.bridge", o.basePackage());
     assertEquals("com.corba", o.idlPackagePrefix());
     assertFalse(o.returnAsDto());
+    assertEquals("Windows-31J", o.stringCharset());
     assertTrue(o.singleProject());
     assertEquals("Bridge", o.projectName());
   }
@@ -64,12 +67,22 @@ class CliOptionsTest {
     assertTrue(CliOptions.parse("-h").help());
   }
 
-  /// 不明なオプション・不正な`--return-mode`・IDLファイル未指定を拒否することを確かめる
+  /// `--string-charset=none`は文字コード名でなくても受け付けることを確かめる
+  @Test
+  void stringCharsetNoneMeansNoConversion() {
+    assertEquals("none", CliOptions.parse("--string-charset=none", "a.idl").stringCharset());
+  }
+
+  /// 不明なオプション・不正な`--return-mode`や`--string-charset`・IDLファイル未指定を拒否することを確かめる
   @Test
   void rejectsInvalidInput() {
     assertThrows(IllegalArgumentException.class, () -> CliOptions.parse("--unknown", "a.idl"));
     assertThrows(
         IllegalArgumentException.class, () -> CliOptions.parse("--return-mode=x", "a.idl"));
+    assertThrows(
+        IllegalArgumentException.class, () -> CliOptions.parse("--string-charset=NoSuch", "a.idl"));
+    assertThrows(
+        IllegalArgumentException.class, () -> CliOptions.parse("--string-charset=a b", "a.idl"));
     assertThrows(IllegalArgumentException.class, () -> CliOptions.parse("--single-project"));
   }
 
@@ -84,6 +97,7 @@ class CliOptionsTest {
             "--base-package",
             "--idl-package-prefix",
             "--return-mode",
+            "--string-charset",
             "--single-project",
             "--project-name",
             "--help")) {

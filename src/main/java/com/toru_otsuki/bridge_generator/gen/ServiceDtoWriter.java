@@ -6,7 +6,8 @@ import com.palantir.javapoet.FieldSpec;
 import com.palantir.javapoet.JavaFile;
 import com.palantir.javapoet.TypeName;
 import com.palantir.javapoet.TypeSpec;
-import com.toru_otsuki.bridge_generator.stub.StubModel;
+import com.toru_otsuki.bridge_generator.model.Operation;
+import com.toru_otsuki.bridge_generator.model.Param;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.List;
@@ -29,13 +30,13 @@ final class ServiceDtoWriter {
   /// @param op 操作のモデル
   /// @param ctx コード生成コンテキスト
   /// @throws IOException ファイルの書き込みに失敗した場合
-  static void generateRequestDto(StubModel.Operation op, GenContext ctx) throws IOException {
+  static void generateRequestDto(Operation op, GenContext ctx) throws IOException {
     TypeMapping types = ctx.types();
     String name = op.capitalizedName();
 
     TypeSpec.Builder requestDto =
         TypeSpec.classBuilder(name + "RequestDto").addModifiers(Modifier.PUBLIC);
-    for (StubModel.Param param : op.params()) {
+    for (Param param : op.params()) {
       if (param.isOut()) continue;
       requestDto.addField(publicField(types.dtoType(param.type()), param.name()));
     }
@@ -60,7 +61,7 @@ final class ServiceDtoWriter {
   /// @param op 操作のモデル
   /// @param ctx コード生成コンテキスト
   /// @throws IOException ファイルの書き込みに失敗した場合
-  static void generateRpcResponse(StubModel.Operation op, GenContext ctx) throws IOException {
+  static void generateRpcResponse(Operation op, GenContext ctx) throws IOException {
     TypeMapping types = ctx.types();
     String name = op.capitalizedName();
 
@@ -79,7 +80,7 @@ final class ServiceDtoWriter {
                 FieldSpec.builder(returnType, "returnValue", Modifier.PUBLIC)
                     .addAnnotation(jsonReturn)
                     .build());
-    for (StubModel.Param param : op.params()) {
+    for (Param param : op.params()) {
       if (!param.isOut()) continue;
       rpcResult.addField(
           publicField(types.resultType(param.type(), ctx.returnAsDto()), param.name()));
@@ -100,13 +101,22 @@ final class ServiceDtoWriter {
     write(rpcResponse, ctx);
   }
 
-  /// application.ymlを出力する。サービスごとに`corba.サービス名.ior`の設定欄を空で設ける。
+  /// application.ymlを出力する
+  ///
+  /// 文字列の文字コード（`corba.string-charset`）には生成時の指定を書き、サービスごとに`corba.サービス名.ior`の設定欄を空で設ける。
+  /// IDLの識別子に`-`は使えないので、サービス名と`string-charset`がぶつかることはない。
   ///
   /// @param ctx コード生成コンテキスト
   /// @param serviceNames サービス名の一覧
   /// @throws IOException ファイルの書き込みに失敗した場合
   static void writeApplicationProperties(GenContext ctx, List<String> serviceNames)
       throws IOException {
+    String charset =
+        """
+          # CORBAサーバーが文字列に使う文字コード（noneなら読み替えない）
+          string-charset: %s
+        """
+            .formatted(ctx.settings().stringCharset());
     String services =
         serviceNames.stream()
             .map(
@@ -117,7 +127,8 @@ final class ServiceDtoWriter {
                     """
                         .formatted(n))
             .collect(Collectors.joining());
-    Files.writeString(ctx.resourcesDir().resolve("application.yml"), "corba:\n" + services);
+    Files.writeString(
+        ctx.resourcesDir().resolve("application.yml"), "corba:\n" + charset + services);
   }
 
   private static FieldSpec publicField(TypeName type, String name) {

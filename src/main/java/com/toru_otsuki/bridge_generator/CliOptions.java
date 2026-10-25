@@ -1,5 +1,7 @@
 package com.toru_otsuki.bridge_generator;
 
+import java.nio.charset.Charset;
+import java.nio.charset.IllegalCharsetNameException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,6 +14,7 @@ import java.util.List;
 /// @param basePackage 生成プロジェクトのベースパッケージ
 /// @param idlPackagePrefix `idlj -pkgPrefix`に渡すパッケージプレフィックス（空なら指定しない）
 /// @param returnAsDto 戻り値・out引数をDTOに変換するかどうか
+/// @param stringCharset CORBAサーバーが文字列に使う文字コード。`none`なら読み替えない（生成アプリの設定の既定値になる）
 /// @param singleProject 全サービスを単一プロジェクトにまとめるかどうか
 /// @param projectName 単一プロジェクト時のプロジェクト名
 /// @param help ヘルプ表示が要求されたかどうか
@@ -22,9 +25,12 @@ record CliOptions(
     String basePackage,
     String idlPackagePrefix,
     boolean returnAsDto,
+    String stringCharset,
     boolean singleProject,
     String projectName,
     boolean help) {
+  /// `--string-charset`で文字コードを読み替えないことを表す値
+  static final String NO_CONVERSION = "none";
 
   CliOptions {
     idlFiles = List.copyOf(idlFiles);
@@ -44,6 +50,7 @@ record CliOptions(
     String basePackage = "com.generated";
     String idlPackagePrefix = "";
     String returnMode = "dto";
+    String stringCharset = "SJIS";
     boolean singleProject = false;
     String projectName = "CombinedApi";
 
@@ -58,13 +65,24 @@ record CliOptions(
         idlPackagePrefix = valueOf(arg);
       } else if (arg.startsWith("--return-mode=")) {
         returnMode = valueOf(arg);
+      } else if (arg.startsWith("--string-charset=")) {
+        stringCharset = valueOf(arg);
       } else if (arg.equals("--single-project")) {
         singleProject = true;
       } else if (arg.startsWith("--project-name=")) {
         projectName = valueOf(arg);
       } else if (arg.equals("--help") || arg.equals("-h")) {
         return new CliOptions(
-            List.of(), stubRoot, outputRoot, basePackage, "", true, false, projectName, true);
+            List.of(),
+            stubRoot,
+            outputRoot,
+            basePackage,
+            "",
+            true,
+            stringCharset,
+            false,
+            projectName,
+            true);
       } else if (arg.startsWith("-")) {
         throw new IllegalArgumentException("不明なオプションです: " + arg);
       } else {
@@ -80,6 +98,11 @@ record CliOptions(
               throw new IllegalArgumentException(
                   "--return-mode には dto か raw を指定してください: " + returnMode);
         };
+    // 生成アプリの起動時ではなく、ここで誤りに気付けるようにする
+    if (!stringCharset.equalsIgnoreCase(NO_CONVERSION) && !isSupportedCharset(stringCharset)) {
+      throw new IllegalArgumentException(
+          "--string-charset にはJavaの文字コード名か none を指定してください: " + stringCharset);
+    }
     if (idlFiles.isEmpty()) {
       throw new IllegalArgumentException("IDLファイルが指定されていません");
     }
@@ -90,6 +113,7 @@ record CliOptions(
         basePackage,
         idlPackagePrefix,
         returnAsDto,
+        stringCharset,
         singleProject,
         projectName,
         false);
@@ -97,6 +121,14 @@ record CliOptions(
 
   private static String valueOf(String arg) {
     return arg.substring(arg.indexOf('=') + 1);
+  }
+
+  private static boolean isSupportedCharset(String name) {
+    try {
+      return Charset.isSupported(name);
+    } catch (IllegalCharsetNameException e) {
+      return false;
+    }
   }
 
   static String usage() {
@@ -109,6 +141,8 @@ record CliOptions(
           --base-package=<package>    生成されるSpringプロジェクトのベースパッケージ(default: com.generated)
           --idl-package-prefix=<pkg>  IDLモジュール名に対してidljのパッケージプレフィックスを適用
           --return-mode=dto|raw       戻り値・out引数をDTOに変換するか(dto)、CORBA型のまま返すか(raw)(default: dto)
+          --string-charset=<cs>|none  CORBAサーバーが文字列に使う文字コード。noneなら読み替えない
+                                      (default: SJIS。生成アプリのcorba.string-charsetで上書きできる)
           --single-project            全サービスを1つのSpringプロジェクトにまとめる
           --project-name=<name>       --single-project 時のプロジェクト名(default: CombinedApi)
           --help, -h                  このヘルプを表示
