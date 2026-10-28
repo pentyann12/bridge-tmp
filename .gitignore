@@ -37,4 +37,4 @@ out/
 .vscode/
 /generated**
 idl-i/
-idl/
+/idl/

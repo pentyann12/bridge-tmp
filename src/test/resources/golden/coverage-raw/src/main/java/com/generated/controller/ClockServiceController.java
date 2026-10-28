@@ -25,6 +25,10 @@ public class ClockServiceController {
 
   @PostMapping("/zone")
   public com.generated.dto.ZoneRpcResponse zone(@RequestBody com.generated.dto.ZoneRpcRequest rpc) {
+    if (rpc.params == null) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "params は必須です");
+    }
     com.generated.dto.ZoneRequestDto req = rpc.params;
     Coverage.Tag arg0 = com.generated.mapper.TagMapper.fromDto(req.hint);
     com.generated.dto.ZoneRpcResult __result = new com.generated.dto.ZoneRpcResult();

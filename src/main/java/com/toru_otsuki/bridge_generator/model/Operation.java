@@ -9,8 +9,11 @@ import java.util.Optional;
 /// @param returnType 戻り値の型。voidなら空
 /// @param params 引数の一覧
 public record Operation(String name, Optional<CorbaType> returnType, List<Param> params) {
+  /// リクエストで値を受け取る引数（in/inout）があるか
+  ///
+  /// @return あればtrue
   public boolean hasInParams() {
-    return params.stream().anyMatch(p -> !p.isOut());
+    return params.stream().anyMatch(Param::isInput);
   }
 
   public boolean hasOutParams() {

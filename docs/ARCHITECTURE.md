@@ -110,8 +110,13 @@ application.yml（corba.<サービス名>.ior の欄をサービスごとに出�
 
 ### 生成される Controller の動き
 
-1. `POST /操作名` で `XxxRpcRequest` を受け取り、`req = rpc.params` とする。
-2. in 引数を DTO → CORBA に変換し、out 引数には空の Holder を用意する。
+1. `POST /操作名` で `XxxRpcRequest` を受け取り、`req = rpc.params` とする。in / inout 引数がある操作で `params` が無ければ、既定値で補って呼び出すことはせず 400 Bad Request で止める。
+2. 引数を向きごとに用意する。
+   - in: DTO → CORBA に変換する。
+   - out: 空の Holder を用意する。
+   - inout: DTO → CORBA に変換した値を入れた Holder を用意する。string・struct・配列は省略すると CORBA に渡せないので、`params` に無ければ 400 Bad Request（`ResponseStatusException`）で止める。数値などのプリミティブは省略すると 0 や false になる。
+
+   in / inout は `XxxRequestDto` に、out / inout は `XxxRpcResult` に現れる（inout は両方）。
 3. `CorbaClient` 経由で呼び出す。
 4. 戻り値と各 `Holder.value` を変換して `XxxRpcResult`（戻り値は `@JsonProperty("return")`）に詰め、`XxxRpcResponse`（`jsonrpc: "2.0"`, `id: 1`）で返す。
 

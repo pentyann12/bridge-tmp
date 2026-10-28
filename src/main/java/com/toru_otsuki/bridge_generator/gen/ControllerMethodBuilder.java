@@ -12,7 +12,8 @@ import java.util.stream.Collectors;
 /// コントローラーメソッド1つ分のコード文字列を組み立てるユーティリティ
 ///
 /// リクエストは`XxxRpcRequest`（`params`フィールドに`XxxRequestDto`）で受け取り、in引数をDTOからCORBA型に変換して呼び出す。
-/// out引数には空のHolderを渡し、呼び出し後に戻り値と各`Holder.value`を`XxxRpcResult`に詰めて`XxxRpcResponse`で返す。
+/// out引数には空のHolderを、inout引数にはリクエストの値を入れたHolderを渡し、呼び出し後に戻り値と各`Holder.value`を
+/// `XxxRpcResult`に詰めて`XxxRpcResponse`で返す。
 final class ControllerMethodBuilder {
   private ControllerMethodBuilder() {}
 
@@ -38,12 +39,15 @@ final class ControllerMethodBuilder {
                 rpcResponse,
                 op.name(),
                 op.hasInParams() ? "@RequestBody " + rpcRequest + " rpc" : "");
+    // paramsを省略したリクエストは、引数を既定値で補って呼び出さずに呼び出し側の誤りとして返す
     String paramsExtraction =
         op.hasInParams()
-            ? "    %s.%sRequestDto req = rpc.params;\n".formatted(dtoPackage, cap)
+            ? badRequestIf("rpc.params == null", "params は必須です")
+                + "    %s.%sRequestDto req = rpc.params;\n".formatted(dtoPackage, cap)
             : "";
 
-    // 呼び出し引数を引数順にarg0, arg1, ...として用意する。in引数はDTOから変換し、out引数は空のHolderを渡す
+    // 呼び出し引数を引数順にarg0, arg1, ...として用意する。in引数はDTOから変換し、out引数は空のHolderを、
+    // inout引数はDTOから変換した値を入れたHolderを渡す
     TypeMapping types = ctx.types();
     List<String> argNames = new ArrayList<>();
     StringBuilder argConversions = new StringBuilder();
@@ -51,10 +55,23 @@ final class ControllerMethodBuilder {
       String argName = "arg" + argNames.size();
       argNames.add(argName);
       String javaType = CorbaClientWriter.javaType(param, types);
+      String fromDto =
+          param.isInput()
+              ? types.fromDto(param.type(), CodeBlock.of("req.$L", param.name())).toString()
+              : "";
       String init =
-          param.isOut()
-              ? "new " + javaType + "()"
-              : types.fromDto(param.type(), CodeBlock.of("req.$L", param.name())).toString();
+          switch (param.direction()) {
+            case IN -> fromDto;
+            case OUT -> "new " + javaType + "()";
+            case INOUT -> "new " + javaType + "(" + fromDto + ")";
+          };
+      // inout引数の値はCORBAサーバーがそのまま使う入力なので、nullのまま渡せない型は空の値で補わずに止める
+      if (param.direction() == Param.Direction.INOUT && isNullable(param.type())) {
+        argConversions.append(
+            badRequestIf(
+                "req.%s == null".formatted(param.name()),
+                "params.%s は必須です（inout引数）".formatted(param.name())));
+      }
       argConversions.append("    %s %s = %s;\n".formatted(javaType, argName, init));
     }
 
@@ -156,6 +173,30 @@ final class ControllerMethodBuilder {
     }
     return "    %s result = %s;\n".formatted(ctx.types().corbaType(type), call)
         + rpcReturn(toDto(type, CodeBlock.of("result"), ctx), rpcResult, rpcResponse);
+  }
+
+  /// JSONで省略するとnullになり、そのままCORBAに渡せない型か
+  ///
+  /// プリミティブは省略すると既定値（0やfalse）になり、Anyは空のAnyにできるので含めない。
+  private static boolean isNullable(CorbaType type) {
+    return type instanceof CorbaType.Str
+        || type instanceof CorbaType.Named
+        || type instanceof CorbaType.ArrayOf;
+  }
+
+  /// 条件を満たしたら、400 Bad Requestで呼び出しを止めるコードを返す
+  ///
+  /// @param condition 止める条件のJava式
+  /// @param message 例外のメッセージ（Javaの文字列リテラルにそのまま埋め込むので、`"`や`\`を含めない）
+  /// @return if文のコード
+  private static String badRequestIf(String condition, String message) {
+    return """
+            if (%s) {
+              throw new org.springframework.web.server.ResponseStatusException(
+                  org.springframework.http.HttpStatus.BAD_REQUEST, "%s");
+            }
+        """
+        .formatted(condition, message);
   }
 
   private static boolean isPrimitiveOrPrimitiveArray(CorbaType type) {

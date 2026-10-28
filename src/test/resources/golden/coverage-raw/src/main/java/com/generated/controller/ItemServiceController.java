@@ -16,6 +16,10 @@ public class ItemServiceController {
 
   @PostMapping("/getItem")
   public com.generated.dto.GetItemRpcResponse getItem(@RequestBody com.generated.dto.GetItemRpcRequest rpc) {
+    if (rpc.params == null) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "params は必須です");
+    }
     com.generated.dto.GetItemRequestDto req = rpc.params;
     int arg0 = req.id;
     Coverage.Item result = client.getItem(arg0);
@@ -28,6 +32,10 @@ public class ItemServiceController {
 
   @PostMapping("/putItem")
   public com.generated.dto.PutItemRpcResponse putItem(@RequestBody com.generated.dto.PutItemRpcRequest rpc) {
+    if (rpc.params == null) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "params は必須です");
+    }
     com.generated.dto.PutItemRequestDto req = rpc.params;
     Coverage.Item arg0 = com.generated.mapper.ItemMapper.fromDto(req.item);
     client.putItem(arg0);
@@ -40,6 +48,10 @@ public class ItemServiceController {
 
   @PostMapping("/listTags")
   public com.generated.dto.ListTagsRpcResponse listTags(@RequestBody com.generated.dto.ListTagsRpcRequest rpc) {
+    if (rpc.params == null) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "params は必須です");
+    }
     com.generated.dto.ListTagsRequestDto req = rpc.params;
     String arg0 = com.generated.mapper.StringMapper.decode(req.prefix);
     Coverage.Tag[] result = client.listTags(arg0);
@@ -52,6 +64,10 @@ public class ItemServiceController {
 
   @PostMapping("/echoNames")
   public com.generated.dto.EchoNamesRpcResponse echoNames(@RequestBody com.generated.dto.EchoNamesRpcRequest rpc) {
+    if (rpc.params == null) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "params は必須です");
+    }
     com.generated.dto.EchoNamesRequestDto req = rpc.params;
     String[] arg0 = req.names == null ? null : java.util.Arrays.stream(req.names).map(com.generated.mapper.StringMapper::decode).toArray(String[]::new);
     String[] result = client.echoNames(arg0);
@@ -64,6 +80,10 @@ public class ItemServiceController {
 
   @PostMapping("/greet")
   public com.generated.dto.GreetRpcResponse greet(@RequestBody com.generated.dto.GreetRpcRequest rpc) {
+    if (rpc.params == null) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "params は必須です");
+    }
     com.generated.dto.GreetRequestDto req = rpc.params;
     String arg0 = com.generated.mapper.StringMapper.decode(req.name);
     com.generated.dto.GreetRpcResult __result = new com.generated.dto.GreetRpcResult();
@@ -75,6 +95,10 @@ public class ItemServiceController {
 
   @PostMapping("/echoAny")
   public com.generated.dto.EchoAnyRpcResponse echoAny(@RequestBody com.generated.dto.EchoAnyRpcRequest rpc) {
+    if (rpc.params == null) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "params は必須です");
+    }
     com.generated.dto.EchoAnyRequestDto req = rpc.params;
     org.omg.CORBA.Any arg0 = com.generated.mapper.AnyMapper.toAny(req.value);
     com.generated.dto.EchoAnyRpcResult __result = new com.generated.dto.EchoAnyRpcResult();
@@ -86,6 +110,10 @@ public class ItemServiceController {
 
   @PostMapping("/findItems")
   public com.generated.dto.FindItemsRpcResponse findItems(@RequestBody com.generated.dto.FindItemsRpcRequest rpc) {
+    if (rpc.params == null) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "params は必須です");
+    }
     com.generated.dto.FindItemsRequestDto req = rpc.params;
     String arg0 = com.generated.mapper.StringMapper.decode(req.keyword);
     Coverage.TagSeqHolder arg1 = new Coverage.TagSeqHolder();
@@ -101,12 +129,43 @@ public class ItemServiceController {
   }
 
   @PostMapping("/touch")
-  public com.generated.dto.TouchRpcResponse touch() {
-    org.omg.CORBA.IntHolder arg0 = new org.omg.CORBA.IntHolder();
+  public com.generated.dto.TouchRpcResponse touch(@RequestBody com.generated.dto.TouchRpcRequest rpc) {
+    if (rpc.params == null) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "params は必須です");
+    }
+    com.generated.dto.TouchRequestDto req = rpc.params;
+    org.omg.CORBA.IntHolder arg0 = new org.omg.CORBA.IntHolder(req.counter);
     client.touch(arg0);
     com.generated.dto.TouchRpcResult __result = new com.generated.dto.TouchRpcResult();
     __result.counter = arg0.value;
     com.generated.dto.TouchRpcResponse __response = new com.generated.dto.TouchRpcResponse();
+    __response.result = __result;
+    return __response;
+  }
+
+  @PostMapping("/relabel")
+  public com.generated.dto.RelabelRpcResponse relabel(@RequestBody com.generated.dto.RelabelRpcRequest rpc) {
+    if (rpc.params == null) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "params は必須です");
+    }
+    com.generated.dto.RelabelRequestDto req = rpc.params;
+    if (req.label == null) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "params.label は必須です（inout引数）");
+    }
+    org.omg.CORBA.StringHolder arg0 = new org.omg.CORBA.StringHolder(com.generated.mapper.StringMapper.decode(req.label));
+    if (req.p == null) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "params.p は必須です（inout引数）");
+    }
+    Coverage.Inner.PointHolder arg1 = new Coverage.Inner.PointHolder(com.generated.mapper.PointMapper.fromDto(req.p));
+    client.relabel(arg0, arg1);
+    com.generated.dto.RelabelRpcResult __result = new com.generated.dto.RelabelRpcResult();
+    __result.label = com.generated.mapper.StringMapper.encode(arg0.value);
+    __result.p = arg1.value;
+    com.generated.dto.RelabelRpcResponse __response = new com.generated.dto.RelabelRpcResponse();
     __response.result = __result;
     return __response;
   }
@@ -122,6 +181,10 @@ public class ItemServiceController {
 
   @PostMapping("/globalNames")
   public com.generated.dto.GlobalNamesRpcResponse globalNames(@RequestBody com.generated.dto.GlobalNamesRpcRequest rpc) {
+    if (rpc.params == null) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "params は必須です");
+    }
     com.generated.dto.GlobalNamesRequestDto req = rpc.params;
     String[] arg0 = req.names == null ? null : java.util.Arrays.stream(req.names).map(com.generated.mapper.StringMapper::decode).toArray(String[]::new);
     String[] result = client.globalNames(arg0);
@@ -134,6 +197,10 @@ public class ItemServiceController {
 
   @PostMapping("/movePoint")
   public com.generated.dto.MovePointRpcResponse movePoint(@RequestBody com.generated.dto.MovePointRpcRequest rpc) {
+    if (rpc.params == null) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "params は必須です");
+    }
     com.generated.dto.MovePointRequestDto req = rpc.params;
     Coverage.Inner.Point arg0 = com.generated.mapper.PointMapper.fromDto(req.p);
     Coverage.Inner.PointHolder arg1 = new Coverage.Inner.PointHolder();

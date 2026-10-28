@@ -1,0 +1,62 @@
+// ジェネレータの回帰テスト用IDL。生成ロジックの各分岐を通るように型と操作を並べている。
+#pragma prefix "toru-otsuki.example"
+
+// グローバルスコープのtypedef（そのままでは無名パッケージに出力される → IdljCompilerがパッケージを与える対象）
+typedef sequence<string> GlobalNames;
+
+module Coverage {
+  typedef sequence<long> LongSeq;
+  typedef sequence<string> StringSeq;
+
+  struct Tag {
+    string key;
+    string value;
+  };
+  typedef sequence<Tag> TagSeq;
+
+  module Inner {
+    struct Point {
+      long x;
+      long y;
+    };
+  };
+
+  struct Item {
+    long id;
+    string name;
+    double price;
+    boolean active;
+    any extra;
+    LongSeq counts;
+    StringSeq labels;
+    TagSeq tags;
+    GlobalNames aliases;
+    Inner::Point location;
+  };
+
+  interface ItemService {
+    Item getItem(in long id);
+    void putItem(in Item item);
+    TagSeq listTags(in string prefix);
+    StringSeq echoNames(in StringSeq names);
+    string greet(in string name);
+    any echoAny(in any value);
+    long findItems(in string keyword, out TagSeq tags, out string message);
+    void touch(inout long counter);
+    void relabel(inout string label, inout Inner::Point p);
+    boolean ping();
+    GlobalNames globalNames(in GlobalNames names);
+    Inner::Point movePoint(in Inner::Point p, out Inner::Point previous);
+    void outAny(out any value);
+  };
+
+  interface EmptyService {
+  };
+};
+
+module Other {
+  interface ClockService {
+    long long now();
+    string zone(in Coverage::Tag hint);
+  };
+};

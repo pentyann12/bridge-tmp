@@ -48,6 +48,10 @@ public class ItemServiceCorbaClient {
     service.touch(counter);
   }
 
+  public void relabel(org.omg.CORBA.StringHolder label, com.corba.Coverage.Inner.PointHolder p) {
+    service.relabel(label, p);
+  }
+
   public boolean ping() {
     return service.ping();
   }

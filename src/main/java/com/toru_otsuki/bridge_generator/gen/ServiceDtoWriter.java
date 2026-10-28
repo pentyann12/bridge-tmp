@@ -18,14 +18,14 @@ import javax.lang.model.element.Modifier;
 ///
 /// 1つの操作に対して次の4クラスを生成する。
 ///
-/// - `XxxRequestDto` — in引数をフィールドに持つリクエストDTO
+/// - `XxxRequestDto` — in/inout引数をフィールドに持つリクエストDTO
 /// - `XxxRpcRequest` — JSON-RPCリクエストのラッパー（`params: XxxRequestDto`）
-/// - `XxxRpcResult` — JSON-RPCレスポンスの`result`（`@JsonProperty("return") returnValue`とout引数）
+/// - `XxxRpcResult` — JSON-RPCレスポンスの`result`（`@JsonProperty("return") returnValue`とout/inout引数）
 /// - `XxxRpcResponse` — JSON-RPCレスポンスのラッパー（`result: XxxRpcResult`）
 final class ServiceDtoWriter {
   private ServiceDtoWriter() {}
 
-  /// リクエストDTO（`XxxRequestDto`）とJSON-RPCラッパー（`XxxRpcRequest`）を出力する。out引数はリクエストボディに含めない。
+  /// リクエストDTO（`XxxRequestDto`）とJSON-RPCラッパー（`XxxRpcRequest`）を出力する。in/inout引数をフィールドに持ち、out引数は含めない。
   ///
   /// @param op 操作のモデル
   /// @param ctx コード生成コンテキスト
@@ -37,7 +37,7 @@ final class ServiceDtoWriter {
     TypeSpec.Builder requestDto =
         TypeSpec.classBuilder(name + "RequestDto").addModifiers(Modifier.PUBLIC);
     for (Param param : op.params()) {
-      if (param.isOut()) continue;
+      if (!param.isInput()) continue;
       requestDto.addField(publicField(types.dtoType(param.type()), param.name()));
     }
     write(requestDto.build(), ctx);
