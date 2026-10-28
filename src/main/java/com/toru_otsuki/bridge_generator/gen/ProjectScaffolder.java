@@ -11,6 +11,9 @@ final class ProjectScaffolder {
 
   /// build.gradleを出力する。WARとしてもデプロイできるよう`war`プラグインを入れ、CORBAの実装にはglassfish-corba-orbとその実行に要るgmbalを使う。
   ///
+  /// 組み込みTomcatは`providedRuntime`にする。外部のTomcatにデプロイしたとき、WARの中の組み込みTomcatとTomcat本体のクラスが
+  /// 重ならないようにするため。`java -jar`で起動するときは、WARの`lib-provided`から読み込まれる。
+  ///
   /// @param outputDir 生成プロジェクトのルートディレクトリ
   /// @throws IOException ファイルの書き込みに失敗した場合
   static void writeBuildGradle(Path outputDir) throws IOException {
@@ -42,6 +45,8 @@ final class ProjectScaffolder {
           // glassfish-corba-orb 5.xはgmbalのAPIだけに依存するが、ORBの初期化時に実装を探すため本体も必要
           runtimeOnly 'org.glassfish.gmbal:gmbal:4.1.2'
           implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1'
+          // 組み込みTomcatは、外部のTomcatにデプロイするWARのWEB-INF/libには入れない（java -jarで動かすときは使われる）
+          providedRuntime 'org.springframework.boot:spring-boot-starter-tomcat-runtime'
         }
         """;
     Files.writeString(
