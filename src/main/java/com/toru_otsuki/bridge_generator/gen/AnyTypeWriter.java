@@ -89,7 +89,11 @@ final class AnyTypeWriter {
   ///   そのため、CORBAから返ってきたAnyのJSONをそのまま送り返せる。
   ///
   /// sequence・union・objrefなどは、Anyに入れるためのTypeCodeをJSONから組み立てられないので、JSON → Anyでは
-  /// IllegalArgumentExceptionにする。Anyを作るだけなら通信用のORBは要らないので、シングルトンORBを使う。
+  /// IllegalArgumentExceptionにする。
+  ///
+  /// Anyはアプリが持つORB（`useOrb`で受け取る）で作る。シングルトンORB（`ORB.init()`）で作ると、structを入れるときに
+  /// シングルトンORBが内部で通信用のORBを固定の名前で作り、JMXに登録する。そのため、同じTomcatに複数のアプリを置くと衝突する。
+  /// アプリのORBが無いとき（Springの外で単体で使うときなど）だけシングルトンORBを使う。
   ///
   /// ライブラリでは、AnyValueの値は（JSONから読んだMapではなく）DTOそのものなので、Jacksonを使わずにDTOとして受け取る。
   /// また`AnyValue.of`のために、DTOのクラス → IDL上の名前の表も登録する。
@@ -234,8 +238,19 @@ final class AnyTypeWriter {
 
           @TARGET_MEMBERS@
 
+          private static volatile ORB appOrb;
+
+          public static void useOrb(ORB orb) {
+            if (appOrb == null) appOrb = orb;
+          }
+
+          public static void releaseOrb(ORB orb) {
+            if (appOrb == orb) appOrb = null;
+          }
+
           private static Any newAny() {
-            return ORB.init().create_any();
+            ORB orb = appOrb;
+            return (orb != null ? orb : ORB.init()).create_any();
           }
 
           public static Any toAny(AnyValue dto) {

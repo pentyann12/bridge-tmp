@@ -70,8 +70,19 @@ public final class AnyMapper {
 
   private static final tools.jackson.databind.json.JsonMapper JSON = new tools.jackson.databind.json.JsonMapper();
 
+  private static volatile ORB appOrb;
+
+  public static void useOrb(ORB orb) {
+    if (appOrb == null) appOrb = orb;
+  }
+
+  public static void releaseOrb(ORB orb) {
+    if (appOrb == orb) appOrb = null;
+  }
+
   private static Any newAny() {
-    return ORB.init().create_any();
+    ORB orb = appOrb;
+    return (orb != null ? orb : ORB.init()).create_any();
   }
 
   public static Any toAny(AnyValue dto) {

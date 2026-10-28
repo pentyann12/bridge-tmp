@@ -55,7 +55,8 @@ final class LibraryScaffolder {
 
   /// Spring Bootの自動設定クラスと、それを登録するファイルを出力する
   ///
-  /// `CorbaConnection`をBeanにし、IORが設定されたサービスだけクライアントをBeanにする。 使わないサービスのIORを書かなくても起動できるようにするため。
+  /// `CorbaConnection`をBeanにし、IORが設定されたサービスだけクライアントをBeanにする。使わないサービスのIORを書かなくても
+  /// 起動できるようにするため。`corba.orb.*`はORBの設定としてそのまま渡す。
   ///
   /// @param services クライアントを生成したサービス
   /// @param ctx コード生成コンテキスト
@@ -89,6 +90,8 @@ final class LibraryScaffolder {
         import org.springframework.boot.autoconfigure.AutoConfiguration;
         import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
         import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+        import org.springframework.boot.context.properties.bind.Bindable;
+        import org.springframework.boot.context.properties.bind.Binder;
         import org.springframework.context.annotation.Bean;
         import org.springframework.core.env.Environment;
 
@@ -96,6 +99,7 @@ final class LibraryScaffolder {
          * Spring Bootの自動設定。CorbaConnectionと、corba.サービス名.ior が設定されたサービスのクライアントをBeanにする。
          *
          * <p>corba.string-charset で、CORBAサーバーが文字列に使う文字コードを指定できる（既定は %2$s、noneなら読み替えない）。
+         * corba.orb.* はORBの設定としてそのまま渡す（例: corba.orb.[org.omg.CORBA.ORBInitialHost]）。
          */
         @AutoConfiguration
         public class CorbaClientAutoConfiguration {
@@ -105,8 +109,10 @@ final class LibraryScaffolder {
 
           @Bean(destroyMethod = "close")
           @ConditionalOnMissingBean
-          public CorbaConnection corbaConnection() {
-            return new CorbaConnection();
+          public CorbaConnection corbaConnection(Environment env) {
+            java.util.Properties orbProperties = new java.util.Properties();
+            Binder.get(env).bind("corba.orb", Bindable.mapOf(String.class, String.class)).ifBound(orbProperties::putAll);
+            return new CorbaConnection(orbProperties);
           }
         %3$s}
         """
@@ -182,6 +188,21 @@ final class LibraryScaffolder {
         | サービス | クライアント | IORの設定 |
         |---|---|---|
         %4$s
+
+        ORBの設定を変えるときは `corba.orb` の下に書きます。キーにドットを含むので `[ ]` で囲みます。
+
+        ```yaml
+        corba:
+          orb:
+            "[com.sun.corba.ee.ORBRegisterMBeans]": true
+        ```
+
+        ### 同じTomcatに複数のアプリを置く場合
+
+        このライブラリを使うWebアプリを同じTomcatに複数置くこと（パラレルデプロイを含む）ができます。
+
+        - jarは各アプリの `WEB-INF/lib` に入れてください（Spring Bootのwarなら標準でそうなります）。Tomcatの共有lib（`$CATALINA_HOME/lib`）に置くと、文字コードの設定がアプリ間で混ざります。
+        - ORBは既定でJMXにMBeanを登録しません。glassfish-corbaのORBはJVMで共有されるMBeanサーバーに固定の名前で登録するため、登録すると2つ目以降のアプリのORBが初期化に失敗します。`com.sun.corba.ee.ORBRegisterMBeans` を `true` にするのは、Tomcatにアプリが1つだけのときに限ってください。
 
         ## 呼び出し方
 

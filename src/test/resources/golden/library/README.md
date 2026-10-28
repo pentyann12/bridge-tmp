@@ -44,6 +44,21 @@ corba:
 | `Guarded` | `com.generated.client.GuardedClient` | `corba.Guarded.ior` |
 | `ClockService` | `com.generated.client.ClockServiceClient` | `corba.ClockService.ior` |
 
+ORBの設定を変えるときは `corba.orb` の下に書きます。キーにドットを含むので `[ ]` で囲みます。
+
+```yaml
+corba:
+  orb:
+    "[com.sun.corba.ee.ORBRegisterMBeans]": true
+```
+
+### 同じTomcatに複数のアプリを置く場合
+
+このライブラリを使うWebアプリを同じTomcatに複数置くこと（パラレルデプロイを含む）ができます。
+
+- jarは各アプリの `WEB-INF/lib` に入れてください（Spring Bootのwarなら標準でそうなります）。Tomcatの共有lib（`$CATALINA_HOME/lib`）に置くと、文字コードの設定がアプリ間で混ざります。
+- ORBは既定でJMXにMBeanを登録しません。glassfish-corbaのORBはJVMで共有されるMBeanサーバーに固定の名前で登録するため、登録すると2つ目以降のアプリのORBが初期化に失敗します。`com.sun.corba.ee.ORBRegisterMBeans` を `true` にするのは、Tomcatにアプリが1つだけのときに限ってください。
+
 ## 呼び出し方
 
 ```java

@@ -35,7 +35,7 @@ final class LibraryRuntimeWriter {
     Files.writeString(
         ctx.clientDir().resolve("CorbaConnection.java"),
         """
-        package %s.client;
+        package %1$s.client;
 
         import java.util.Properties;
         import java.util.function.Function;
@@ -44,11 +44,17 @@ final class LibraryRuntimeWriter {
         /**
          * CORBAのORBを1つ持ち、IORからサービスを解決する。
          *
-         * <p>プロセスで1つ作り、各サービスのクライアントで共有する。Spring Bootでは自動設定がBeanとして作り、終了時に閉じる。
+         * <p>アプリで1つ作り、各サービスのクライアントで共有する。Spring Bootでは自動設定がBeanとして作り、終了時に閉じる。
+         *
+         * <p>ORBは既定ではJMXにMBeanを登録しない。glassfish-corbaのORBはJVMで共有されるMBeanサーバーに固定の名前で登録するため、
+         * このライブラリを使うWebアプリを同じTomcatに複数（パラレルデプロイを含む）置くと、2つ目以降のORBが初期化に失敗するため。
          */
         public final class CorbaConnection implements AutoCloseable {
           /** glassfish-corbaのORBは、このシステムプロパティが無いと初期化に失敗する。 */
           private static final String GMBAL_PROPERTY = "org.glassfish.gmbal.no.multipleUpperBoundsException";
+
+          /** ORBの設定のうち、ライブラリが既定値を変えているもの。 */
+          private static final String REGISTER_MBEANS_PROPERTY = "com.sun.corba.ee.ORBRegisterMBeans";
 
           private final ORB orb;
 
@@ -56,12 +62,17 @@ final class LibraryRuntimeWriter {
             this(new Properties());
           }
 
-          /** ORBの設定（org.omg.CORBA.ORBInitialHostなど）を指定して作る。 */
+          /** ORBの設定（org.omg.CORBA.ORBInitialHostなど）を指定して作る。指定した設定はライブラリの既定値より優先する。 */
           public CorbaConnection(Properties orbProperties) {
             if (System.getProperty(GMBAL_PROPERTY) == null) {
               System.setProperty(GMBAL_PROPERTY, "true");
             }
-            this.orb = ORB.init(new String[0], orbProperties);
+            Properties properties = new Properties();
+            properties.setProperty(REGISTER_MBEANS_PROPERTY, "false");
+            properties.putAll(orbProperties);
+            this.orb = ORB.init(new String[0], properties);
+            // Anyもこのアプリ専用のORBで作る（シングルトンORBは内部のORBを固定の名前でJMXに登録してしまう）
+            %1$s.mapper.AnyMapper.useOrb(orb);
           }
 
           public ORB orb() {
@@ -75,6 +86,7 @@ final class LibraryRuntimeWriter {
 
           @Override
           public void close() {
+            %1$s.mapper.AnyMapper.releaseOrb(orb);
             orb.shutdown(false);
             orb.destroy();
           }

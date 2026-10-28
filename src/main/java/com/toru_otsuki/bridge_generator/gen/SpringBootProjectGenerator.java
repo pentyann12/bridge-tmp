@@ -68,6 +68,7 @@ public final class SpringBootProjectGenerator {
     AnyTypeWriter.writeAnyValueDto(ctx, Target.REST);
     AnyTypeWriter.writeAnyMapper(ctx, settings.structs(), Target.REST);
     StringMapperWriter.write(ctx);
+    CorbaClientWriter.writeOrb(ctx);
     for (Struct struct : settings.structs()) {
       DtoGenerator.generate(struct, ctx);
       MapperGenerator.generate(struct, ctx);

@@ -111,6 +111,7 @@ setupProject（プロジェクトごとに 1 回）
  ├─ build.gradle / Application.java / ServletInitializer.java
  ├─ スタブ一式をコピー（並列）
  ├─ dto/AnyValue.java、mapper/AnyMapper.java、mapper/StringMapper.java
+ ├─ corba/CorbaOrb.java（アプリで 1 つの ORB）
  └─ 構造体ごとに dto/XxxDto.java、mapper/XxxMapper.java
 generateService（サービスごと。操作が無ければ何もしない）
  ├─ 操作ごとに dto/XxxRequestDto・XxxRpcRequest・XxxRpcResult・XxxRpcResponse
@@ -118,6 +119,18 @@ generateService（サービスごと。操作が無ければ何もしない）
  └─ controller/<サービス名>Controller.java
 application.yml（corba.<サービス名>.ior の欄をサービスごとに出力）
 ```
+
+### ORB の持ち方（CorbaOrb）と、同じ Tomcat に複数のアプリを置く場合
+
+ORB はアプリで 1 つ（`CorbaOrb` Bean）にし、全サービスの `CorbaClient` で共有して、アプリの終了時に破棄します。共有ライブラリの `CorbaConnection` も同じ方針です。
+
+glassfish-corba の ORB は、既定では JVM で共有される JMX の MBean サーバーに、`com.sun.corba:...ORB-Root[orb]` のような**固定の名前**で自分を登録します。そのため、同じ Tomcat に生成したアプリを 2 つ以上置く（パラレルデプロイを含む）と、2 つ目以降の ORB が `InstanceAlreadyExistsException` で初期化に失敗し、続けて IIOP の待ち受けポートの初期化も壊れます（`Unable to create IIOP listener` / `BindException`）。これを避けるため、次のようにしています。
+
+- ORB は既定で `com.sun.corba.ee.ORBRegisterMBeans=false`（MBean を登録しない）で作ります。`corba.orb.*` の設定は ORB にそのまま渡し、既定値より優先します（例: `corba.orb.[com.sun.corba.ee.ORBRegisterMBeans]=true`）。
+- `AnyMapper` は Any をアプリの ORB で作ります（`AnyMapper.useOrb`）。シングルトン ORB（`ORB.init()`）で struct 入りの Any を作ると、シングルトン ORB が内部で通信用の ORB を固定の名前（`_$$$_INTERNAL_FULL_ORB_ID_$$$_`）で作って MBean を登録するため、同じ衝突が起きます。
+- gmbal のシステムプロパティ（`org.glassfish.gmbal.no.multipleUpperBoundsException`）も ORB を作る前に設定するので、JVM 引数は要りません。
+
+Tomcat 11.0.27 で、修正前は 2 つ目のアプリとパラレルデプロイがどちらも失敗し、修正後はどちらも成功することを確かめています。アンデプロイ時に Tomcat が ORB の ThreadLocal を「メモリリークの可能性」として警告しますが、Tomcat がリクエスト処理スレッドを入れ替えて回収するので、実害はありません（停止しないスレッドは残りません）。
 
 ### 生成される Controller の動き
 
@@ -139,7 +152,7 @@ Any は JSON では `{"type": 型名, "value": 値}`（`AnyValue`）で表し、
 - **JSON → CORBA（`toAny`）**: `type` が基本型（`long`・`string` など）ならその型で入れます。IDL の構造体名なら、JSON の値（Jackson では `LinkedHashMap`）を DTO に読み替え、Mapper と Helper で Any に入れます。`any` は入れ子として再帰的に処理します。そのため、CORBA から返ってきた JSON をそのまま送り返せます。
 - sequence・union・objref などは、Any に入れる TypeCode を JSON から組み立てられないため、`toAny` では `IllegalArgumentException` にします（CORBA → JSON 方向は従来どおり）。
 - `string` は他の文字列と同じく `StringMapper` で文字コードの読み替えをします。
-- Any を作るだけなので、通信用の ORB ではなくシングルトン ORB（`ORB.init()`）を使います。
+- Any はアプリの ORB で作ります（理由は「ORB の持ち方」を参照）。アプリの ORB が無いときだけシングルトン ORB を使います。
 
 構造体が多いと 1 メソッドが JVM の 64KB 上限を超えるため、登録処理は 50 件ずつのメソッドに分けます。
 
@@ -167,7 +180,7 @@ REST ブリッジは `raises` に対応していません。スタブのメソ�
 
 - **クライアント（`XxxClient`）**: in / inout 引数をメソッドの引数に、戻り値を戻り値にします。out / inout 引数がある操作は、戻り値と out / inout 引数をまとめた record（`XxxClient.操作名Result`）を返します。inout の string・struct・配列が null なら `NullPointerException` にします。サービスのオブジェクト参照は最初の呼び出しで解決するので、CORBA サーバーが止まっていても利用側は起動できます。
 - **例外**: `raises` のユーザー例外は、DTO を `detail()` で持つ `XxxException`（名前が Exception で終わる exception はそのままの名前）に、CORBA のシステム例外は `CorbaCallException` に包み直します。どちらも `RuntimeException` です。
-- **ORB**: `CorbaConnection` が 1 つ持ち、閉じるときに破棄します。glassfish-corba の ORB が必要とするシステムプロパティ（gmbal）もここで設定するので、利用側は JVM 引数を書かなくて済みます。
+- **ORB**: `CorbaConnection` が 1 つ持ち、閉じるときに破棄します。REST ブリッジの `CorbaOrb` と同じく、MBean を登録しない設定と、gmbal のシステムプロパティの設定をします。`corba.orb.*` は ORB にそのまま渡します。同じ Tomcat に利用アプリを複数置けますが、jar は Tomcat の共有 lib ではなく各アプリの `WEB-INF/lib` に置きます（`StringMapper` の文字コード設定が static のため）。
 - **Spring Boot**: 利用側が Spring Boot なら、jar を依存に入れるだけで自動設定が働きます。`CorbaConnection` を Bean にし（終了時に close）、`corba.<サービス名>.ior` が設定されたサービスだけクライアントを Bean にします。`corba.string-charset` は起動時に `StringMapper.configure` へ渡します。Spring Boot はコンパイル時だけの依存で、Spring を使わない利用者は `CorbaConnection` と `XxxClient` を自分で作ります。
 - **Any**: ライブラリの `AnyValue` は不変の record で、構造体の値は DTO そのものです（REST では JSON から読んだ Map）。`AnyValue.of(dto)` で型名を補って作り、`as(Class)` で型を指定して取り出します。
 - **配布**: jar を直接渡す想定なので、依存（glassfish-corba-omgapi・glassfish-corba-orb・gmbal）は利用側で書きます。生成する README に一覧を載せます。

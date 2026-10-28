@@ -5,6 +5,8 @@ import com.generated.mapper.StringMapper;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.env.Environment;
 
@@ -12,6 +14,7 @@ import org.springframework.core.env.Environment;
  * Spring Bootの自動設定。CorbaConnectionと、corba.サービス名.ior が設定されたサービスのクライアントをBeanにする。
  *
  * <p>corba.string-charset で、CORBAサーバーが文字列に使う文字コードを指定できる（既定は SJIS、noneなら読み替えない）。
+ * corba.orb.* はORBの設定としてそのまま渡す（例: corba.orb.[org.omg.CORBA.ORBInitialHost]）。
  */
 @AutoConfiguration
 public class CorbaClientAutoConfiguration {
@@ -21,8 +24,10 @@ public class CorbaClientAutoConfiguration {
 
   @Bean(destroyMethod = "close")
   @ConditionalOnMissingBean
-  public CorbaConnection corbaConnection() {
-    return new CorbaConnection();
+  public CorbaConnection corbaConnection(Environment env) {
+    java.util.Properties orbProperties = new java.util.Properties();
+    Binder.get(env).bind("corba.orb", Bindable.mapOf(String.class, String.class)).ifBound(orbProperties::putAll);
+    return new CorbaConnection(orbProperties);
   }
 
   @Bean

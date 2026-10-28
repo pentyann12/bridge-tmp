@@ -1,6 +1,5 @@
 package com.generated.corba;
 
-import org.omg.CORBA.ORB;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import Coverage.ItemService;
@@ -10,9 +9,8 @@ import Coverage.ItemServiceHelper;
 public class ItemServiceCorbaClient {
   private final ItemService service;
 
-  public ItemServiceCorbaClient(@Value("${corba.ItemService.ior}") String ior) {
-    ORB orb = ORB.init(new String[0], null);
-    org.omg.CORBA.Object obj = orb.string_to_object(ior);
+  public ItemServiceCorbaClient(CorbaOrb corbaOrb, @Value("${corba.ItemService.ior}") String ior) {
+    org.omg.CORBA.Object obj = corbaOrb.orb().string_to_object(ior);
     this.service = ItemServiceHelper.narrow(obj);
   }
 

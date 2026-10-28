@@ -47,7 +47,8 @@
 ## 4. 注意点
 - 実行にはJDK 25が必要です。JDK 11以降には`idlj`が含まれないため、ジェネレータはMavenの`org.glassfish.corba:idlj`をライブラリとして同じプロセスで動かし、Javaスタブを生成します。
 - `--idl-package-prefix`を指定しない場合、moduleはIDLの名前のままのパッケージに、グローバルスコープの型は`generated`パッケージに出力されます。
-- 生成されるプロジェクトはSpring Boot 4.1・JDK 25・glassfish-corba-orb 5.0向けです。glassfish-corba-orb 5.0はgmbalの実装を別途必要とするため、生成される`build.gradle`には`org.glassfish.gmbal:gmbal`も含まれます。
+- 生成されるプロジェクトはSpring Boot 4.1・JDK 25・glassfish-corba-orb 5.0向けです。glassfish-corba-orb 5.0はgmbalの実装を別途必要とするため、生成される`build.gradle`には`org.glassfish.gmbal:gmbal`も含まれます。gmbalが必要とするシステムプロパティは生成したコードが設定するので、JVM引数は不要です。
+- 生成したアプリは、同じTomcatに複数（パラレルデプロイを含む）置けます。ORBはJMXにMBeanを登録しない設定で動きます（理由は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) の「ORB の持ち方」）。ORBの設定は `corba.orb.*` で渡せます。
 - 生成されたSpring Bootプロジェクトは、サービスインターフェースの定義に基づいて作成されますが、ビジネスロジックやデータアクセスコードは含まれていません。これらは手動で実装する必要があります。
 - 生成されたコードは、プロジェクトの構造や命名規則に基づいていますが、必要に応じてカスタマイズしてください。
 - RESTブリッジはIDLの `raises`（ユーザー例外）に対応していません。`raises` を含むIDLから生成したプロジェクトはコンパイルできません。共有ライブラリ（`--target=library`）は対応しています。
