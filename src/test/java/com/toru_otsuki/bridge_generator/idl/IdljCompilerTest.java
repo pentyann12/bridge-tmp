@@ -109,6 +109,30 @@ class IdljCompilerTest {
     assertEquals("com.corba.Coverage.Inner", point.pkg());
   }
 
+  /// 操作の`raises`と、`exception`であることがモデルに入ることを確かめる
+  ///
+  /// @param stubs スタブの出力先
+  /// @throws Exception 生成に失敗した場合
+  @Test
+  void raisesAndExceptionsAreModeled(@TempDir Path stubs) throws Exception {
+    IdlModel model =
+        IdljCompiler.compile(Path.of("src/test/resources/idl/errors.idl"), stubs, "com.corba");
+    Service guarded = service(model, "Guarded");
+    assertEquals(
+        List.of(
+            new CorbaType.Named("com.corba.Errors", "NotFound"),
+            new CorbaType.Named("com.corba.Errors", "AccessDeniedException")),
+        operation(guarded, "fetch").raises());
+    assertEquals(
+        List.of(new CorbaType.Named("com.corba.Errors", "AccessDeniedException")),
+        operation(guarded, "check").raises());
+
+    Struct notFound =
+        model.structs().stream().filter(s -> s.name().equals("NotFound")).findFirst().orElseThrow();
+    assertTrue(notFound.exception());
+    assertEquals("IDL:toru-otsuki.example/Errors/NotFound:1.0", notFound.repoId());
+  }
+
   /// 文法の誤りがあるIDLは、生成を止めて利用者向けのエラーにすることを確かめる
   ///
   /// @param dir IDLとスタブを置く作業ディレクトリ

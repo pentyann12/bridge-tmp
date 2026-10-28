@@ -1,6 +1,7 @@
 package com.toru_otsuki.bridge_generator.idl;
 
 import com.sun.tools.corba.ee.idl.AttributeEntry;
+import com.sun.tools.corba.ee.idl.ExceptionEntry;
 import com.sun.tools.corba.ee.idl.InterfaceEntry;
 import com.sun.tools.corba.ee.idl.MethodEntry;
 import com.sun.tools.corba.ee.idl.ModuleEntry;
@@ -100,7 +101,9 @@ final class ModelBuilder {
       if (method instanceof AttributeEntry) continue;
       Optional<CorbaType> returnType =
           method.type() == null ? Optional.empty() : Optional.of(resolve(method.type()));
-      operations.add(new Operation(method.name(), returnType, params(method)));
+      List<CorbaType.Named> raises =
+          method.exceptions().stream().map(e -> (CorbaType.Named) resolve(e)).toList();
+      operations.add(new Operation(method.name(), returnType, params(method), raises));
     }
     return new Service(simpleName(javaName), packageName(javaName), operations);
   }
@@ -127,7 +130,12 @@ final class ModelBuilder {
     List<Field> fields =
         struct.members().stream().map(m -> new Field(m.name(), resolve(m))).toList();
     return new Struct(
-        packageName(javaName), simpleName(javaName), struct.repositoryID().ID(), idlName, fields);
+        packageName(javaName),
+        simpleName(javaName),
+        struct.repositoryID().ID(),
+        idlName,
+        fields,
+        struct instanceof ExceptionEntry);
   }
 
   /// IDLの型をコード生成上の分類に写す。typedefは元の型までたどり、配列の宣言（`long a[3]`）は配列にする

@@ -21,6 +21,7 @@
 ```
 
 このコマンドの引数は以下の通りです：
+- `--target`: 生成するもの。`rest`（既定）はHTTP/JSONで公開するSpring Bootプロジェクト、`library` はCORBAサービスを型付きのJavaメソッドで呼ぶための共有ライブラリ（jar）のプロジェクトです。共有ライブラリの使い方は、生成されたプロジェクトの README.md に書かれます。
 - `--stub-root`: Javaスタブの出力先ディレクトリ。
 - `--output-root`: 生成されたSpring Bootプロジェクトの出力先ディレクトリ。
 - `--base-package`: 生成されるJavaコードのベースパッケージ。
@@ -28,7 +29,7 @@
 - `--return-mode`: サービスインターフェースのメソッドの戻り値の形式を指定します。`raw` を指定すると、IDLで定義された型をそのまま使用します。`dto` を指定すると、戻り値をDTOクラスに変換します。
 - `--string-charset`: CORBAサーバーが文字列に使う文字コード（既定値 `SJIS`。`Windows-31J` などJavaの文字コード名か、読み替えない場合は `none`）。生成アプリの `application.yml` の `corba.string-charset` に書かれ、生成し直さずに設定や起動引数（`--corba.string-charset=...`）で変更できます。
 - `--single-project`: 全サービスを1つのSpring Bootプロジェクトにまとめます。指定しない場合はサービスごとに `<サービス名>Api` プロジェクトを生成します。
-- `--project-name`: `--single-project` 時のプロジェクト名（既定値 `CombinedApi`）。
+- `--project-name`: `--single-project` 時・共有ライブラリのプロジェクト名（既定値は `CombinedApi`、共有ライブラリでは `corba-client`）。
 - `idl/service.idl`: 解析するIDLファイルのパス。
 
 不明なオプションや不正な値を渡すと、使い方を表示して終了コード 2 で終了します。
@@ -49,3 +50,4 @@
 - 生成されるプロジェクトはSpring Boot 4.1・JDK 25・glassfish-corba-orb 5.0向けです。glassfish-corba-orb 5.0はgmbalの実装を別途必要とするため、生成される`build.gradle`には`org.glassfish.gmbal:gmbal`も含まれます。
 - 生成されたSpring Bootプロジェクトは、サービスインターフェースの定義に基づいて作成されますが、ビジネスロジックやデータアクセスコードは含まれていません。これらは手動で実装する必要があります。
 - 生成されたコードは、プロジェクトの構造や命名規則に基づいていますが、必要に応じてカスタマイズしてください。
+- RESTブリッジはIDLの `raises`（ユーザー例外）に対応していません。`raises` を含むIDLから生成したプロジェクトはコンパイルできません。共有ライブラリ（`--target=library`）は対応しています。

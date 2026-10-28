@@ -1,7 +1,9 @@
 package com.toru_otsuki.bridge_generator;
 
 import com.toru_otsuki.bridge_generator.gen.GenSettings;
+import com.toru_otsuki.bridge_generator.gen.LibraryProjectGenerator;
 import com.toru_otsuki.bridge_generator.gen.SpringBootProjectGenerator;
+import com.toru_otsuki.bridge_generator.gen.Target;
 import com.toru_otsuki.bridge_generator.idl.IdljCompiler;
 import com.toru_otsuki.bridge_generator.model.IdlModel;
 import com.toru_otsuki.bridge_generator.model.Service;
@@ -11,10 +13,10 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-/// IDLファイルからSpring Bootプロジェクトを生成するまでの全工程を実行する
+/// IDLファイルからプロジェクト（RESTブリッジか共有ライブラリ）を生成するまでの全工程を実行する
 ///
 /// 1. IDLごとに、idljでスタブを生成し、同じ解析結果からモデル（サービスと構造体）を作る
-/// 1. モデルからSpring Bootプロジェクトを生成する
+/// 1. モデルからプロジェクトを生成する
 ///
 /// @param options 解析済みのコマンドライン引数
 record BridgeGenerator(CliOptions options) {
@@ -40,7 +42,7 @@ record BridgeGenerator(CliOptions options) {
       throw new GenerationException("IDLにinterfaceが1つもありません");
     }
 
-    // 2. 単一プロジェクトにまとめるか、サービスごとに<サービス名>Apiを作る
+    // 2. 共有ライブラリなら全サービスを1つに、RESTなら単一プロジェクトにまとめるか、サービスごとに<サービス名>Apiを作る
     GenSettings settings =
         new GenSettings(
             options.basePackage(),
@@ -49,7 +51,11 @@ record BridgeGenerator(CliOptions options) {
             stubRoot,
             model.structs());
     List<Path> generated = new ArrayList<>();
-    if (options.singleProject()) {
+    if (options.target() == Target.LIBRARY) {
+      Path output = options.outputRoot().resolve(options.projectName());
+      LibraryProjectGenerator.generate(model.services(), output, options.projectName(), settings);
+      generated.add(output);
+    } else if (options.singleProject()) {
       Path output = options.outputRoot().resolve(options.projectName());
       SpringBootProjectGenerator.generateAll(model.services(), output, settings);
       generated.add(output);

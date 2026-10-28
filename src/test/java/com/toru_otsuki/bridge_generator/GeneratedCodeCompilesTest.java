@@ -24,8 +24,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 /// 生成したプロジェクトのJavaソースが実際にコンパイルできることを確かめる
 ///
-/// 起動クラス（Application・ServletInitializer）以外の全ソース（スタブ・DTO・Mapper・CorbaClient・Controller）を、
-/// 生成コードが使うAPI（spring-web・spring-context・Jackson・CORBA API）だけをクラスパスに載せてコンパイルする。
+/// 起動クラス（Application・ServletInitializer）以外の全ソース（スタブ・DTO・Mapper・CorbaClient・Controller、共有ライブラリではクライアントと自動設定）を、
+/// 生成コードが使うAPI（spring-web・spring-context・Spring Bootの自動設定・Jackson・CORBA API）だけをクラスパスに載せてコンパイルする。
 class GeneratedCodeCompilesTest {
   /// Spring Bootの依存が要るためコンパイル対象から外すファイル
   private static final Set<String> SPRING_BOOT_ONLY =
@@ -70,6 +70,22 @@ class GeneratedCodeCompilesTest {
       }
       assertCompiles(project, tmp.resolve("classes-" + project.getFileName()));
     }
+  }
+
+  /// 共有ライブラリのソース（Spring Bootの自動設定を含む）がコンパイルできることを確かめる
+  ///
+  /// @param tmp 作業ディレクトリ
+  /// @throws Exception 生成やコンパイルの準備に失敗した場合
+  @Test
+  void libraryCompiles(@TempDir Path tmp) throws Exception {
+    TestGeneration.Result result =
+        TestGeneration.run(
+            tmp,
+            "--target=library",
+            "--idl-package-prefix=com.corba",
+            TestGeneration.COVERAGE_IDL.toString(),
+            TestGeneration.ERRORS_IDL.toString());
+    assertCompiles(result.singleProject(), tmp.resolve("classes"));
   }
 
   /// プロジェクトのJavaソースをコンパイルし、エラーがあればその内容を添えて失敗させる

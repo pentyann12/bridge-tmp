@@ -16,26 +16,61 @@ final class AnyTypeWriter {
 
   private AnyTypeWriter() {}
 
-  /// Anyの代わりにJSONで受け渡すAnyValueクラス（型名と値の組）を出力する
+  /// Anyの代わりに受け渡すAnyValueクラス（型名と値の組）を出力する
+  ///
+  /// RESTではJacksonで読み書きできる可変のクラスにする。ライブラリでは不変のrecordにし、DTOから型名を補って作る`of`と、 型を指定して値を取り出す`as`を足す。
   ///
   /// @param ctx コード生成コンテキスト
+  /// @param target 生成するプロジェクトの種類
   /// @throws IOException ファイルの書き込みに失敗した場合
-  static void writeAnyValueDto(GenContext ctx) throws IOException {
-    String content =
-        """
-        package %s.dto;
+  static void writeAnyValueDto(GenContext ctx, Target target) throws IOException {
+    String template =
+        switch (target) {
+          case REST ->
+              """
+              package %s.dto;
 
-        public class AnyValue {
-          public String type;
-          public Object value;
-          public AnyValue() {}
-          public AnyValue(String type, Object value) {
-            this.type = type;
-            this.value = value;
-          }
-        }
-        """
-            .formatted(ctx.basePackage());
+              public class AnyValue {
+                public String type;
+                public Object value;
+                public AnyValue() {}
+                public AnyValue(String type, Object value) {
+                  this.type = type;
+                  this.value = value;
+                }
+              }
+              """;
+          case LIBRARY ->
+              """
+              package %1$s.dto;
+
+              /**
+               * CORBAのAnyに入れる値（型名と値の組）。
+               *
+               * <p>typeは基本型なら"long"・"string"など、構造体ならIDL上の名前（例: "Coverage.Item"）。構造体のvalueはそのDTO。
+               */
+              public record AnyValue(String type, Object value) {
+                /**
+                 * 構造体のDTOから、型名を補ってAnyValueを作る。
+                 *
+                 * @throws IllegalArgumentException このライブラリが知らないクラスの場合
+                 */
+                public static AnyValue of(Object dto) {
+                  String type = %1$s.mapper.AnyMapper.typeNameOf(dto.getClass());
+                  if (type == null) {
+                    throw new IllegalArgumentException(dto.getClass().getName() + " はAnyに入れられる構造体のDTOではありません");
+                  }
+                  return new AnyValue(type, dto);
+                }
+
+                /** 値が指定した型ならそれを返す。 */
+                public <T> java.util.Optional<T> as(Class<T> valueType) {
+                  return valueType.isInstance(value) ? java.util.Optional.of(valueType.cast(value)) : java.util.Optional.empty();
+                }
+              }
+              """;
+        };
+    String content = template.formatted(ctx.basePackage());
     Files.writeString(
         ctx.dtoDir().resolve("AnyValue.java"),
         content,
@@ -56,11 +91,17 @@ final class AnyTypeWriter {
   /// sequence・union・objrefなどは、Anyに入れるためのTypeCodeをJSONから組み立てられないので、JSON → Anyでは
   /// IllegalArgumentExceptionにする。Anyを作るだけなら通信用のORBは要らないので、シングルトンORBを使う。
   ///
+  /// ライブラリでは、AnyValueの値は（JSONから読んだMapではなく）DTOそのものなので、Jacksonを使わずにDTOとして受け取る。
+  /// また`AnyValue.of`のために、DTOのクラス → IDL上の名前の表も登録する。
+  ///
   /// @param ctx コード生成コンテキスト
   /// @param structs DTO/Mapperを生成する構造体
+  /// @param target 生成するプロジェクトの種類
   /// @throws IOException ファイルの書き込みに失敗した場合
-  static void writeAnyMapper(GenContext ctx, List<Struct> structs) throws IOException {
+  static void writeAnyMapper(GenContext ctx, List<Struct> structs, Target target)
+      throws IOException {
     String pkg = ctx.basePackage() + ".mapper";
+    boolean library = target == Target.LIBRARY;
 
     List<String> entries =
         structs.stream()
@@ -73,46 +114,69 @@ final class AnyTypeWriter {
                           : struct.pkg() + "." + className + "Helper";
                   String mapperFqn = pkg + "." + className + "Mapper";
                   String dtoFqn = ctx.basePackage() + ".dto." + className + "Dto";
-                  return """
-                          m.put("%1$s", any -> new AnyValue("%2$s", %3$s.toDto(%4$s.extract(any))));
-                          r.put("%2$s", v -> { Any any = newAny(); %4$s.insert(any, %3$s.fromDto(JSON.convertValue(v, %5$s.class))); return any; });
+                  String dtoValue =
+                      library
+                          ? "(%s) v".formatted(dtoFqn)
+                          : "JSON.convertValue(v, %s.class)".formatted(dtoFqn);
+                  String entry =
                       """
-                      .formatted(struct.repoId(), struct.idlName(), mapperFqn, helperFqn, dtoFqn);
+                          m.put("%1$s", any -> new AnyValue("%2$s", %3$s.toDto(%4$s.extract(any))));
+                          r.put("%2$s", v -> { Any any = newAny(); %4$s.insert(any, %3$s.fromDto(%6$s)); return any; });
+                      """;
+                  if (library) {
+                    entry +=
+                        """
+                            t.put(%5$s.class, "%2$s");
+                        """;
+                  }
+                  return entry.formatted(
+                      struct.repoId(), struct.idlName(), mapperFqn, helperFqn, dtoFqn, dtoValue);
                 })
             .toList();
 
     // 登録処理をSTRUCT_CHUNK件ずつinitStructHandlersNメソッドに分け、static初期化子から順に呼ぶ
+    String typeTableParam = library ? ",\n      java.util.Map<Class<?>, String> t" : "";
     List<String> chunkMethods = new ArrayList<>();
     for (int i = 0; i < entries.size(); i += STRUCT_CHUNK) {
       chunkMethods.add(
           """
             private static void initStructHandlers%d(
                 java.util.Map<String, java.util.function.Function<Any, AnyValue>> m,
-                java.util.Map<String, java.util.function.Function<Object, Any>> r) {
+                java.util.Map<String, java.util.function.Function<Object, Any>> r%s) {
           %s  }
           """
               .formatted(
                   i / STRUCT_CHUNK,
+                  typeTableParam,
                   String.join("", entries.subList(i, Math.min(i + STRUCT_CHUNK, entries.size())))));
     }
 
     String initCalls =
         IntStream.range(0, chunkMethods.size())
-            .mapToObj("    initStructHandlers%d(m, r);\n"::formatted)
+            .mapToObj(i -> "    initStructHandlers%d(m, r%s);\n".formatted(i, library ? ", t" : ""))
             .collect(Collectors.joining());
+    String typeTable =
+        library ? "  private static final java.util.Map<Class<?>, String> DTO_TYPES;\n" : "";
     String structHandlersBlock =
         """
           private static final java.util.Map<String, java.util.function.Function<Any, AnyValue>> STRUCT_HANDLERS;
           private static final java.util.Map<String, java.util.function.Function<Object, Any>> STRUCT_INSERTERS;
-          static {
+        %s  static {
             java.util.Map<String, java.util.function.Function<Any, AnyValue>> m = new java.util.HashMap<>();
             java.util.Map<String, java.util.function.Function<Object, Any>> r = new java.util.HashMap<>();
-        %s    STRUCT_HANDLERS = java.util.Collections.unmodifiableMap(m);
+        %s%s    STRUCT_HANDLERS = java.util.Collections.unmodifiableMap(m);
             STRUCT_INSERTERS = java.util.Collections.unmodifiableMap(r);
-          }
+        %s  }
 
         %s"""
-            .formatted(initCalls, String.join("\n", chunkMethods));
+            .formatted(
+                typeTable,
+                library
+                    ? "    java.util.Map<Class<?>, String> t = new java.util.HashMap<>();\n"
+                    : "",
+                initCalls,
+                library ? "    DTO_TYPES = java.util.Collections.unmodifiableMap(t);\n" : "",
+                String.join("\n", chunkMethods));
 
     // 構造体の登録処理は件数で形が変わるので、テンプレート中の//@@STRUCT_HANDLERS@@行を後から差し替える
     String content =
@@ -168,7 +232,7 @@ final class AnyTypeWriter {
 
           //@@STRUCT_HANDLERS@@
 
-          private static final tools.jackson.databind.json.JsonMapper JSON = new tools.jackson.databind.json.JsonMapper();
+          @TARGET_MEMBERS@
 
           private static Any newAny() {
             return ORB.init().create_any();
@@ -176,29 +240,29 @@ final class AnyTypeWriter {
 
           public static Any toAny(AnyValue dto) {
             Any any = newAny();
-            if (dto == null || dto.type == null || "null".equals(dto.type)) return any;
-            switch (dto.type) {
-              case "boolean": any.insert_boolean((Boolean) dto.value); break;
-              case "short": any.insert_short(((Number) dto.value).shortValue()); break;
-              case "ushort": any.insert_ushort(((Number) dto.value).shortValue()); break;
-              case "long": any.insert_long(((Number) dto.value).intValue()); break;
-              case "ulong": any.insert_ulong(((Number) dto.value).intValue()); break;
-              case "longlong": any.insert_longlong(((Number) dto.value).longValue()); break;
-              case "ulonglong": any.insert_ulonglong(((Number) dto.value).longValue()); break;
-              case "float": any.insert_float(((Number) dto.value).floatValue()); break;
-              case "double": any.insert_double(((Number) dto.value).doubleValue()); break;
-              case "char": any.insert_char(String.valueOf(dto.value).charAt(0)); break;
-              case "wchar": any.insert_wchar(String.valueOf(dto.value).charAt(0)); break;
-              case "octet": any.insert_octet(((Number) dto.value).byteValue()); break;
-              case "string": any.insert_string(StringMapper.decode(String.valueOf(dto.value))); break;
-              case "wstring": any.insert_wstring(String.valueOf(dto.value)); break;
-              case "any": any.insert_any(toAny(JSON.convertValue(dto.value, AnyValue.class))); break;
+            if (dto == null || @T@ == null || "null".equals(@T@)) return any;
+            switch (@T@) {
+              case "boolean": any.insert_boolean((Boolean) @V@); break;
+              case "short": any.insert_short(((Number) @V@).shortValue()); break;
+              case "ushort": any.insert_ushort(((Number) @V@).shortValue()); break;
+              case "long": any.insert_long(((Number) @V@).intValue()); break;
+              case "ulong": any.insert_ulong(((Number) @V@).intValue()); break;
+              case "longlong": any.insert_longlong(((Number) @V@).longValue()); break;
+              case "ulonglong": any.insert_ulonglong(((Number) @V@).longValue()); break;
+              case "float": any.insert_float(((Number) @V@).floatValue()); break;
+              case "double": any.insert_double(((Number) @V@).doubleValue()); break;
+              case "char": any.insert_char(String.valueOf(@V@).charAt(0)); break;
+              case "wchar": any.insert_wchar(String.valueOf(@V@).charAt(0)); break;
+              case "octet": any.insert_octet(((Number) @V@).byteValue()); break;
+              case "string": any.insert_string(StringMapper.decode(String.valueOf(@V@))); break;
+              case "wstring": any.insert_wstring(String.valueOf(@V@)); break;
+              case "any": any.insert_any(@ANY_VALUE@); break;
               default:
-                java.util.function.Function<Object, Any> inserter = STRUCT_INSERTERS.get(dto.type);
+                java.util.function.Function<Object, Any> inserter = STRUCT_INSERTERS.get(@T@);
                 if (inserter == null) {
-                  throw new IllegalArgumentException("AnyValue.type「" + dto.type + "」はCORBAのAnyに変換できません");
+                  throw new IllegalArgumentException("AnyValue.type「" + @T@ + "」はCORBAのAnyに変換できません");
                 }
-                return inserter.apply(dto.value);
+                return inserter.apply(@V@);
             }
             return any;
           }
@@ -330,7 +394,25 @@ final class AnyTypeWriter {
         }
         """
             .formatted(pkg, ctx.basePackage())
-            .replace("  //@@STRUCT_HANDLERS@@\n", structHandlersBlock);
+            .replace("  //@@STRUCT_HANDLERS@@\n", structHandlersBlock)
+            // RESTのAnyValueは公開フィールドを持つクラスで、入れ子のanyの値はJSONから読んだMapになっている。
+            // ライブラリのAnyValueはrecordで、入れ子のanyの値はAnyValueそのもの
+            .replace("@T@", library ? "dto.type()" : "dto.type")
+            .replace("@V@", library ? "dto.value()" : "dto.value")
+            .replace(
+                "@ANY_VALUE@",
+                library
+                    ? "toAny((AnyValue) dto.value())"
+                    : "toAny(JSON.convertValue(dto.value, AnyValue.class))")
+            .replace(
+                "@TARGET_MEMBERS@",
+                library
+                    ? """
+                      public static String typeNameOf(Class<?> dtoClass) {
+                          return DTO_TYPES.get(dtoClass);
+                        }"""
+                    : "private static final tools.jackson.databind.json.JsonMapper JSON"
+                        + " = new tools.jackson.databind.json.JsonMapper();");
 
     Files.writeString(
         ctx.mapperDir().resolve("AnyMapper.java"),

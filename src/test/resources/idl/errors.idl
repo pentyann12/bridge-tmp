@@ -1,0 +1,20 @@
+// 共有ライブラリの回帰テスト用IDL。ユーザー例外（raises）を使う操作を並べている。
+// RESTブリッジは今のところraisesに対応していない（生成したCorbaClientがコンパイルできない）ので、ライブラリのテストだけで使う。
+#pragma prefix "toru-otsuki.example"
+
+module Errors {
+  exception NotFound {
+    long id;
+    string reason;
+  };
+
+  // 名前がExceptionで終わる例外（ライブラリの例外クラス名にExceptionを重ねない）
+  exception AccessDeniedException {
+    string who;
+  };
+
+  interface Guarded {
+    string fetch(in long id) raises (NotFound, AccessDeniedException);
+    void check(inout string token) raises (AccessDeniedException);
+  };
+};

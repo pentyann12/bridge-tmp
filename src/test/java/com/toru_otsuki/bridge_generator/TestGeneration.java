@@ -14,6 +14,9 @@ final class TestGeneration {
   /// 生成ロジックの各分岐を通るように作った回帰テスト用IDL
   static final Path COVERAGE_IDL = Path.of("src/test/resources/idl/coverage.idl");
 
+  /// ユーザー例外（raises）を使う、共有ライブラリの回帰テスト用IDL。RESTブリッジはraisesに対応していないので使わない
+  static final Path ERRORS_IDL = Path.of("src/test/resources/idl/errors.idl");
+
   private TestGeneration() {}
 
   /// 生成結果

@@ -48,6 +48,21 @@ record GenContext(GenSettings settings, Path outputDir) {
     return packageDir().resolve("mapper");
   }
 
+  /// 共有ライブラリの、型付きクライアントとCORBA接続を置くディレクトリ
+  Path clientDir() {
+    return packageDir().resolve("client");
+  }
+
+  /// 共有ライブラリの、例外クラスを置くディレクトリ
+  Path exceptionDir() {
+    return packageDir().resolve("exception");
+  }
+
+  /// 共有ライブラリの、Spring Bootの自動設定を置くディレクトリ
+  Path springDir() {
+    return packageDir().resolve("spring");
+  }
+
   Path resourcesDir() {
     return outputDir.resolve("src/main/resources");
   }

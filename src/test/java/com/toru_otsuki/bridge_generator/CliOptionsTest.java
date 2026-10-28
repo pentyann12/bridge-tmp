@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.toru_otsuki.bridge_generator.gen.Target;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -67,13 +68,28 @@ class CliOptionsTest {
     assertTrue(CliOptions.parse("-h").help());
   }
 
+  /// 既定はRESTブリッジで、`--target=library`ではプロジェクト名の既定値が`corba-client`になることを確かめる
+  @Test
+  void targetSelectsProjectKind() {
+    CliOptions rest = CliOptions.parse("a.idl");
+    assertEquals(Target.REST, rest.target());
+    assertEquals("CombinedApi", rest.projectName());
+
+    CliOptions library = CliOptions.parse("--target=LIBRARY", "a.idl");
+    assertEquals(Target.LIBRARY, library.target());
+    assertEquals("corba-client", library.projectName());
+    assertEquals(
+        "my-lib",
+        CliOptions.parse("--target=library", "--project-name=my-lib", "a.idl").projectName());
+  }
+
   /// `--string-charset=none`は文字コード名でなくても受け付けることを確かめる
   @Test
   void stringCharsetNoneMeansNoConversion() {
     assertEquals("none", CliOptions.parse("--string-charset=none", "a.idl").stringCharset());
   }
 
-  /// 不明なオプション・不正な`--return-mode`や`--string-charset`・IDLファイル未指定を拒否することを確かめる
+  /// 不明なオプション・不正な`--return-mode`・`--string-charset`・`--target`・IDLファイル未指定を拒否することを確かめる
   @Test
   void rejectsInvalidInput() {
     assertThrows(IllegalArgumentException.class, () -> CliOptions.parse("--unknown", "a.idl"));
@@ -81,6 +97,7 @@ class CliOptionsTest {
         IllegalArgumentException.class, () -> CliOptions.parse("--return-mode=x", "a.idl"));
     assertThrows(
         IllegalArgumentException.class, () -> CliOptions.parse("--string-charset=NoSuch", "a.idl"));
+    assertThrows(IllegalArgumentException.class, () -> CliOptions.parse("--target=x", "a.idl"));
     assertThrows(
         IllegalArgumentException.class, () -> CliOptions.parse("--string-charset=a b", "a.idl"));
     assertThrows(IllegalArgumentException.class, () -> CliOptions.parse("--single-project"));
@@ -96,6 +113,7 @@ class CliOptionsTest {
             "--output-root",
             "--base-package",
             "--idl-package-prefix",
+            "--target",
             "--return-mode",
             "--string-charset",
             "--single-project",

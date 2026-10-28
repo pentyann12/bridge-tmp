@@ -8,7 +8,9 @@ import java.util.Optional;
 /// @param name 操作名
 /// @param returnType 戻り値の型。voidなら空
 /// @param params 引数の一覧
-public record Operation(String name, Optional<CorbaType> returnType, List<Param> params) {
+/// @param raises `raises`で宣言したユーザー例外（宣言順）
+public record Operation(
+    String name, Optional<CorbaType> returnType, List<Param> params, List<CorbaType.Named> raises) {
   /// リクエストで値を受け取る引数（in/inout）があるか
   ///
   /// @return あればtrue

@@ -9,4 +9,14 @@ import java.util.List;
 /// @param repoId リポジトリID（`#pragma prefix`などを反映した、IDLコンパイラが付けたもの）
 /// @param idlName IDL上のスコープ付きの名前をドットでつないだもの（例: `Coverage.Tag`）
 /// @param fields フィールドの一覧
-public record Struct(String pkg, String name, String repoId, String idlName, List<Field> fields) {}
+/// @param exception IDLの`exception`ならtrue（スタブは`org.omg.CORBA.UserException`のサブクラスになる）
+public record Struct(
+    String pkg, String name, String repoId, String idlName, List<Field> fields, boolean exception) {
+
+  /// この型を参照するときの型モデルを返す
+  ///
+  /// @return 名前付きの型
+  public CorbaType.Named type() {
+    return new CorbaType.Named(pkg, name);
+  }
+}

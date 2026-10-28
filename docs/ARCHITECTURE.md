@@ -2,16 +2,21 @@
 
 ## 概要
 
-CORBA サービスの IDL ファイルを入力に、その CORBA サービスを JSON-RPC 風の REST API として公開する Spring Boot プロジェクトを生成します。
+CORBA サービスの IDL ファイルを入力に、次のどちらかを生成します（`--target`）。
+
+- **rest**（既定）: その CORBA サービスを JSON-RPC 風の REST API として公開する Spring Boot プロジェクト
+- **library**: その CORBA サービスを型付きの Java メソッドで呼ぶための共有ライブラリ（jar）。詳しくは「4. 共有ライブラリの生成」
 
 ```
 IDL ファイル
   │ 1. IdljCompiler   idlj を同じプロセスで動かし、構文解析・パッケージ割り当て・スタブ生成を行う
   │ 2. ModelBuilder   idlj の記号表からサービス・操作・引数・構造体のモデルを作る（型は CorbaType に分類）
-  │ 3. SpringBootProjectGenerator と各ライター
+  │ 3. SpringBootProjectGenerator（rest）/ LibraryProjectGenerator（library）と各ライター
   ▼
-Spring Boot プロジェクト
+Spring Boot プロジェクト / 共有ライブラリのプロジェクト
 ```
+
+構造体の DTO / Mapper と型の変換規則（`TypeMapping`）は両方で共通です。共有ライブラリは REST ブリッジとは独立に生成し、REST ブリッジの生成物には影響しません。
 
 ## パッケージとクラス構成
 
@@ -50,6 +55,11 @@ com.toru_otsuki.bridge_generator   入口と全体の流れ
 | `ServiceDtoWriter` | 操作ごとの `RequestDto`・`RpcRequest`・`RpcResult`・`RpcResponse` と application.yml |
 | `CorbaClientWriter` | IOR からサービスに接続し、操作を委譲する `CorbaClient` |
 | `ControllerWriter` / `ControllerMethodBuilder` | `@RestController` と操作ごとの `POST /操作名` |
+| `Target` | 生成するプロジェクトの種類（rest / library） |
+| `LibraryProjectGenerator` | 共有ライブラリの生成手順 |
+| `ClientWriter` | サービスごとの型付きクライアント `XxxClient` と結果の record |
+| `LibraryRuntimeWriter` | `CorbaConnection`・例外の基底クラス・IDL の exception ごとの例外クラス |
+| `LibraryScaffolder` | 共有ライブラリの build.gradle・Spring Boot の自動設定・README |
 
 ---
 
@@ -73,6 +83,7 @@ module と interface の中を宣言順にたどり、次を集めます。Java 
 - **サービス**: `interface`。操作は、その interface で宣言したもの（`methods()`）だけです。継承した操作と `attribute` は含めません。
 - **構造体**: `struct` と `exception`。リポジトリ ID は idlj が付けた値（`#pragma prefix` 反映済み）をそのまま使います。
 - **引数の向き**: IDL の `in` / `out` / `inout` をそのまま使い、out / inout の Holder 名も idlj の規則で求めます。
+- **ユーザー例外**: 操作の `raises` を宣言順に持ちます。exception の定義は、構造体として `exception` の印を付けて集めます。
 - **型の解決**: `typedef` は元の型までたどり、`sequence` と配列の宣言（`long a[3]`）は配列にします。
 
 複数の IDL を渡した場合は IDL ごとの結果を `IdlModel.merge` で統合し、Java のパスで重複を除いて並べます。
@@ -132,15 +143,44 @@ Any は JSON では `{"type": 型名, "value": 値}`（`AnyValue`）で表し、
 
 構造体が多いと 1 メソッドが JVM の 64KB 上限を超えるため、登録処理は 50 件ずつのメソッドに分けます。
 
+### raises（ユーザー例外）の制約
+
+REST ブリッジは `raises` に対応していません。スタブのメソッドがチェック例外を投げるのに、生成する `CorbaClient` が宣言していないため、`raises` のある IDL では生成したプロジェクトがコンパイルできません。共有ライブラリは対応しています。
+
+## 4. 共有ライブラリの生成
+
+`--target=library` で、全サービスを 1 つの java-library プロジェクト（`<output-root>/<project-name>`、既定は `corba-client`）にまとめます。利用者には DTO と Java の型だけを見せ、Holder・Any・CORBA の型・文字コード・ORB は隠します。
+
+```
+<project>/
+ ├─ build.gradle / settings.gradle / README.md（利用者向けの使い方）
+ ├─ src/main/java/
+ │   ├─ スタブ一式
+ │   └─ <base-package>/
+ │       ├─ dto/       構造体ごとの XxxDto、AnyValue（record）
+ │       ├─ mapper/    構造体ごとの XxxMapper、AnyMapper、StringMapper（Spring に依存しない版）
+ │       ├─ client/    サービスごとの XxxClient、CorbaConnection
+ │       ├─ exception/ IDL の exception ごとの XxxException、CorbaUserException、CorbaCallException
+ │       └─ spring/    CorbaClientAutoConfiguration
+ └─ src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
+```
+
+- **クライアント（`XxxClient`）**: in / inout 引数をメソッドの引数に、戻り値を戻り値にします。out / inout 引数がある操作は、戻り値と out / inout 引数をまとめた record（`XxxClient.操作名Result`）を返します。inout の string・struct・配列が null なら `NullPointerException` にします。サービスのオブジェクト参照は最初の呼び出しで解決するので、CORBA サーバーが止まっていても利用側は起動できます。
+- **例外**: `raises` のユーザー例外は、DTO を `detail()` で持つ `XxxException`（名前が Exception で終わる exception はそのままの名前）に、CORBA のシステム例外は `CorbaCallException` に包み直します。どちらも `RuntimeException` です。
+- **ORB**: `CorbaConnection` が 1 つ持ち、閉じるときに破棄します。glassfish-corba の ORB が必要とするシステムプロパティ（gmbal）もここで設定するので、利用側は JVM 引数を書かなくて済みます。
+- **Spring Boot**: 利用側が Spring Boot なら、jar を依存に入れるだけで自動設定が働きます。`CorbaConnection` を Bean にし（終了時に close）、`corba.<サービス名>.ior` が設定されたサービスだけクライアントを Bean にします。`corba.string-charset` は起動時に `StringMapper.configure` へ渡します。Spring Boot はコンパイル時だけの依存で、Spring を使わない利用者は `CorbaConnection` と `XxxClient` を自分で作ります。
+- **Any**: ライブラリの `AnyValue` は不変の record で、構造体の値は DTO そのものです（REST では JSON から読んだ Map）。`AnyValue.of(dto)` で型名を補って作り、`as(Class)` で型を指定して取り出します。
+- **配布**: jar を直接渡す想定なので、依存（glassfish-corba-omgapi・glassfish-corba-orb・gmbal）は利用側で書きます。生成する README に一覧を載せます。
+
 ## テスト
 
-`./gradlew test` で次を実行します。網羅用 IDL は `src/test/resources/idl/coverage.idl` です。
+`./gradlew test` で次を実行します。網羅用 IDL は `src/test/resources/idl/coverage.idl` です。ユーザー例外を使う `errors.idl` は、REST ブリッジが `raises` に対応していないため共有ライブラリのテストだけで使います。
 
 | テスト | 内容 |
 |---|---|
-| `GoldenTest` | 網羅用 IDL から生成したプロジェクト（idlj スタブのコピーを除く）を `src/test/resources/golden/` と比較 |
-| `GeneratedCodeCompilesTest` | 生成したソースを spring-web・spring-context・jackson-annotations・CORBA API だけをクラスパスにしてコンパイル |
-| `IdljCompilerTest` | グローバル型のパッケージ、引数の向きと Holder、typedef の解決、リポジトリ ID、文法エラー |
+| `GoldenTest` | 網羅用 IDL から生成したプロジェクト（idlj スタブのコピーを除く）を `src/test/resources/golden/` と比較。REST の 2 通り（dto / raw）と共有ライブラリ |
+| `GeneratedCodeCompilesTest` | 生成したソースを spring-web・spring-context・Spring Boot の自動設定・Jackson・CORBA API だけをクラスパスにしてコンパイル |
+| `IdljCompilerTest` | グローバル型のパッケージ、引数の向きと Holder、typedef の解決、リポジトリ ID、raises、文法エラー |
 | `CliOptionsTest` / `TypeMappingTest` | 各部品の単体テスト |
 
 生成ロジックを意図して変えたときは、`./gradlew test -Dgolden.update=true` で期待値を更新し、差分をレビューしてからコミットします。

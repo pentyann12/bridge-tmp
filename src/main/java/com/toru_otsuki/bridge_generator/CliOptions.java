@@ -1,5 +1,6 @@
 package com.toru_otsuki.bridge_generator;
 
+import com.toru_otsuki.bridge_generator.gen.Target;
 import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
 import java.nio.file.Path;
@@ -8,6 +9,7 @@ import java.util.List;
 
 /// コマンドライン引数を解析した結果
 ///
+/// @param target 生成するプロジェクトの種類
 /// @param idlFiles 処理対象のIDLファイル
 /// @param stubRoot idljの出力先ディレクトリ
 /// @param outputRoot Springプロジェクトの出力先ディレクトリ
@@ -16,9 +18,10 @@ import java.util.List;
 /// @param returnAsDto 戻り値・out引数をDTOに変換するかどうか
 /// @param stringCharset CORBAサーバーが文字列に使う文字コード。`none`なら読み替えない（生成アプリの設定の既定値になる）
 /// @param singleProject 全サービスを単一プロジェクトにまとめるかどうか
-/// @param projectName 単一プロジェクト時のプロジェクト名
+/// @param projectName 単一プロジェクト時・ライブラリのプロジェクト名
 /// @param help ヘルプ表示が要求されたかどうか
 record CliOptions(
+    Target target,
     List<Path> idlFiles,
     Path stubRoot,
     Path outputRoot,
@@ -52,10 +55,13 @@ record CliOptions(
     String returnMode = "dto";
     String stringCharset = "SJIS";
     boolean singleProject = false;
-    String projectName = "CombinedApi";
+    String projectName = null;
+    String targetName = "rest";
 
     for (String arg : args) {
-      if (arg.startsWith("--stub-root=")) {
+      if (arg.startsWith("--target=")) {
+        targetName = valueOf(arg);
+      } else if (arg.startsWith("--stub-root=")) {
         stubRoot = Path.of(valueOf(arg));
       } else if (arg.startsWith("--output-root=")) {
         outputRoot = Path.of(valueOf(arg));
@@ -73,6 +79,7 @@ record CliOptions(
         projectName = valueOf(arg);
       } else if (arg.equals("--help") || arg.equals("-h")) {
         return new CliOptions(
+            Target.REST,
             List.of(),
             stubRoot,
             outputRoot,
@@ -81,7 +88,7 @@ record CliOptions(
             true,
             stringCharset,
             false,
-            projectName,
+            "CombinedApi",
             true);
       } else if (arg.startsWith("-")) {
         throw new IllegalArgumentException("不明なオプションです: " + arg);
@@ -98,6 +105,17 @@ record CliOptions(
               throw new IllegalArgumentException(
                   "--return-mode には dto か raw を指定してください: " + returnMode);
         };
+    Target target =
+        switch (targetName.toLowerCase()) {
+          case "", "rest" -> Target.REST;
+          case "library" -> Target.LIBRARY;
+          default ->
+              throw new IllegalArgumentException(
+                  "--target には rest か library を指定してください: " + targetName);
+        };
+    if (projectName == null) {
+      projectName = target == Target.LIBRARY ? "corba-client" : "CombinedApi";
+    }
     // 生成アプリの起動時ではなく、ここで誤りに気付けるようにする
     if (!stringCharset.equalsIgnoreCase(NO_CONVERSION) && !isSupportedCharset(stringCharset)) {
       throw new IllegalArgumentException(
@@ -107,6 +125,7 @@ record CliOptions(
       throw new IllegalArgumentException("IDLファイルが指定されていません");
     }
     return new CliOptions(
+        target,
         idlFiles,
         stubRoot,
         outputRoot,
@@ -136,6 +155,8 @@ record CliOptions(
         Usage: [options] <idl-file>...
 
         Options:
+          --target=rest|library       生成するもの。rest: HTTP/JSONで公開するSpring Bootアプリ、
+                                      library: 型付きのJavaメソッドで呼ぶ共有ライブラリ(default: rest)
           --stub-root=<path>          IDL生成Javaソースの出力先ディレクトリ(default: generated-stubs)
           --output-root=<path>        Springプロジェクト出力先ディレクトリ(default: generated-spring)
           --base-package=<package>    生成されるSpringプロジェクトのベースパッケージ(default: com.generated)
@@ -144,7 +165,8 @@ record CliOptions(
           --string-charset=<cs>|none  CORBAサーバーが文字列に使う文字コード。noneなら読み替えない
                                       (default: SJIS。生成アプリのcorba.string-charsetで上書きできる)
           --single-project            全サービスを1つのSpringプロジェクトにまとめる
-          --project-name=<name>       --single-project 時のプロジェクト名(default: CombinedApi)
+          --project-name=<name>       --single-project 時・ライブラリのプロジェクト名
+                                      (default: rest は CombinedApi、library は corba-client)
           --help, -h                  このヘルプを表示
 
         """;

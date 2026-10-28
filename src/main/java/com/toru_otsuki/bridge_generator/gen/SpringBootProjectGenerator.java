@@ -65,8 +65,8 @@ public final class SpringBootProjectGenerator {
     ProjectScaffolder.writeApplicationClass(ctx.basePackage(), ctx.packageDir());
     ProjectScaffolder.writeServletClass(ctx.basePackage(), ctx.packageDir());
     StubFiles.copyIdlStubSources(settings.stubRoot(), ctx.javaDir());
-    AnyTypeWriter.writeAnyValueDto(ctx);
-    AnyTypeWriter.writeAnyMapper(ctx, settings.structs());
+    AnyTypeWriter.writeAnyValueDto(ctx, Target.REST);
+    AnyTypeWriter.writeAnyMapper(ctx, settings.structs(), Target.REST);
     StringMapperWriter.write(ctx);
     for (Struct struct : settings.structs()) {
       DtoGenerator.generate(struct, ctx);

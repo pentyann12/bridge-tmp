@@ -28,7 +28,7 @@ public class Main {
 
     try {
       for (Path project : new BridgeGenerator(options).run()) {
-        System.out.println("Spring project generated at: " + project);
+        System.out.println("Project generated at: " + project);
       }
     } catch (GenerationException e) {
       // 利用者向けに用意したメッセージなので、スタックトレースは出さない

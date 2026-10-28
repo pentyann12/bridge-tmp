@@ -23,27 +23,31 @@ class GoldenTest {
 
   /// 比較するシナリオを返す
   ///
-  /// @return シナリオ名とコマンドライン引数（IDLファイル以外）の組
+  /// @return シナリオ名とコマンドライン引数（IDLファイルを含む）の組
   static Stream<Arguments> scenarios() {
+    String coverage = TestGeneration.COVERAGE_IDL.toString();
+    String errors = TestGeneration.ERRORS_IDL.toString();
     return Stream.of(
-        Arguments.of("coverage-dto", List.of("--single-project", "--idl-package-prefix=com.corba")),
-        Arguments.of("coverage-raw", List.of("--single-project", "--return-mode=raw")));
+        Arguments.of(
+            "coverage-dto",
+            List.of("--single-project", "--idl-package-prefix=com.corba", coverage)),
+        Arguments.of("coverage-raw", List.of("--single-project", "--return-mode=raw", coverage)),
+        Arguments.of(
+            "library",
+            List.of("--target=library", "--idl-package-prefix=com.corba", coverage, errors)));
   }
 
   /// 生成したプロジェクトのファイル一覧と各ファイルの内容が期待値と一致することを確かめる。`golden.update`が指定されていれば、比較せずに期待値を書き換える。
   ///
   /// @param name シナリオ名（期待値のディレクトリ名）
-  /// @param options コマンドライン引数（IDLファイル以外）
+  /// @param options コマンドライン引数（IDLファイルを含む）
   /// @param tmp 作業ディレクトリ
   /// @throws Exception 生成やファイルの読み書きに失敗した場合
   @ParameterizedTest(name = "{0}")
   @MethodSource("scenarios")
   void generatedProjectMatchesGolden(String name, List<String> options, @TempDir Path tmp)
       throws Exception {
-    String[] args =
-        Stream.concat(options.stream(), Stream.of(TestGeneration.COVERAGE_IDL.toString()))
-            .toArray(String[]::new);
-    TestGeneration.Result result = TestGeneration.run(tmp, args);
+    TestGeneration.Result result = TestGeneration.run(tmp, options.toArray(String[]::new));
     Map<String, String> actual =
         TestGeneration.generatedFiles(result.singleProject(), result.stubRoot());
 
