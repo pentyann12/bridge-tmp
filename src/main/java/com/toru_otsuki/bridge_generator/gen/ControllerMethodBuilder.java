@@ -66,7 +66,7 @@ final class ControllerMethodBuilder {
             case INOUT -> "new " + javaType + "(" + fromDto + ")";
           };
       // inout引数の値はCORBAサーバーがそのまま使う入力なので、nullのまま渡せない型は空の値で補わずに止める
-      if (param.direction() == Param.Direction.INOUT && isNullable(param.type())) {
+      if (param.direction() == Param.Direction.INOUT && TypeMapping.needsValue(param.type())) {
         argConversions.append(
             badRequestIf(
                 "req.%s == null".formatted(param.name()),
@@ -173,15 +173,6 @@ final class ControllerMethodBuilder {
     }
     return "    %s result = %s;\n".formatted(ctx.types().corbaType(type), call)
         + rpcReturn(toDto(type, CodeBlock.of("result"), ctx), rpcResult, rpcResponse);
-  }
-
-  /// JSONで省略するとnullになり、そのままCORBAに渡せない型か
-  ///
-  /// プリミティブは省略すると既定値（0やfalse）になり、Anyは空のAnyにできるので含めない。
-  private static boolean isNullable(CorbaType type) {
-    return type instanceof CorbaType.Str
-        || type instanceof CorbaType.Named
-        || type instanceof CorbaType.ArrayOf;
   }
 
   /// 条件を満たしたら、400 Bad Requestで呼び出しを止めるコードを返す

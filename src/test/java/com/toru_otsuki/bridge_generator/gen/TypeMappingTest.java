@@ -1,6 +1,8 @@
 package com.toru_otsuki.bridge_generator.gen;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.palantir.javapoet.CodeBlock;
 import com.toru_otsuki.bridge_generator.model.CorbaType;
@@ -61,6 +63,16 @@ class TypeMappingTest {
     assertEquals(
         "x == null ? null : java.util.Arrays.stream(x).map(b.mapper.TagMapper::fromDto).toArray(A.Tag[]::new)",
         TYPES.fromDto(arrayOf(TAG), X).toString());
+  }
+
+  /// nullのままCORBAに渡せない型（文字列・名前付きの型・配列）だけが、値を必要とすることを確かめる
+  @Test
+  void needsValueOnlyForTypesThatCannotBeNull() {
+    assertTrue(TypeMapping.needsValue(CorbaType.STRING));
+    assertTrue(TypeMapping.needsValue(TAG));
+    assertTrue(TypeMapping.needsValue(arrayOf(INT)));
+    assertFalse(TypeMapping.needsValue(INT));
+    assertFalse(TypeMapping.needsValue(CorbaType.ANY));
   }
 
   /// 多次元配列は、内側の配列をラムダ式で入れ子に変換することを確かめる

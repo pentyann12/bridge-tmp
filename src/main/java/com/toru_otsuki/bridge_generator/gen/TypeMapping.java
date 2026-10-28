@@ -86,6 +86,18 @@ record TypeMapping(String basePackage) {
     return convert(type, rhs, true, asDto, 0);
   }
 
+  /// DTO側でnullのまま、CORBAに渡せない型か（inout引数のように、利用側に値を必ず求める型）
+  ///
+  /// 文字列・名前付きの型・配列はnullのままCORBAで送れない。プリミティブは省略すると既定値（0やfalse）になり、 Anyは空のAnyにできるので含めない。
+  ///
+  /// @param type 値の型
+  /// @return 値が必要ならtrue
+  static boolean needsValue(CorbaType type) {
+    return type instanceof CorbaType.Str
+        || type instanceof CorbaType.Named
+        || type instanceof CorbaType.ArrayOf;
+  }
+
   /// DTO側の値をCORBA側の値に変換する式を返す
   ///
   /// @param type 値の型

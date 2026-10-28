@@ -115,7 +115,7 @@ final class ClientWriter {
           args.add("__" + p.name());
         }
         case INOUT -> {
-          if (isNullable(p.type())) {
+          if (TypeMapping.needsValue(p.type())) {
             prepare.append(
                 "      java.util.Objects.requireNonNull(%1$s, \"%1$s\");\n".formatted(p.name()));
           }
@@ -201,13 +201,6 @@ final class ClientWriter {
 
   private static String toDto(CorbaType type, String expr, TypeMapping types) {
     return types.toDto(type, CodeBlock.of("$L", expr), true).toString();
-  }
-
-  /// nullのままCORBAに渡せない型か（プリミティブは既定値になり、Anyは空のAnyにできる）
-  private static boolean isNullable(CorbaType type) {
-    return type instanceof CorbaType.Str
-        || type instanceof CorbaType.Named
-        || type instanceof CorbaType.ArrayOf;
   }
 
   private static String qualified(String pkg, String name) {
