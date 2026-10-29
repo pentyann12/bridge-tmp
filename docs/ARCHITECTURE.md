@@ -80,8 +80,9 @@ idlj は日時をロケールの書式でスタブに書くため、日本語ロ
 
 module と interface の中を宣言順にたどり、次を集めます。Java の名前は idlj の対応規則（`Util.javaQualifiedName` / `Util.holderName`）で求めるので、スタブの名前と必ず一致します。
 
-- **サービス**: `interface`。操作は、その interface で宣言したもの（`methods()`）だけです。継承した操作と `attribute` は含めません。
+- **サービス**: `interface`。操作は、その interface で宣言したもの（`methods()`）と、継承したもの（`allMethods()` から宣言したものを除き、ひし形の継承の重複も除く）を分けて持ちます。`attribute` は含めません。
 - **構造体**: `struct` と `exception`。リポジトリ ID は idlj が付けた値（`#pragma prefix` 反映済み）をそのまま使います。
+- **enum**: 選択肢の名前を宣言順に持ちます。enum を参照する型は、構造体と同じく `Named` にします（変換の形が同じため）。
 - **引数の向き**: IDL の `in` / `out` / `inout` をそのまま使い、out / inout の Holder 名も idlj の規則で求めます。
 - **ユーザー例外**: 操作の `raises` を宣言順に持ちます。exception の定義は、構造体として `exception` の印を付けて集めます。
 - **型の解決**: `typedef` は元の型までたどり、`sequence` と配列の宣言（`long a[3]`）は配列にします。
@@ -95,10 +96,12 @@ module と interface の中を宣言順にたどり、次を集めます。Java 
 | `Primitive` | `int`, `long` | 同じ | そのまま | そのまま |
 | `Str` | `String` | `String` | `StringMapper.encode` | `StringMapper.decode` |
 | `AnyType` | `org.omg.CORBA.Any` | `AnyValue` | `AnyMapper.toAnyValue` | `AnyMapper.toAny` |
-| `Named` | `Coverage.Tag` | `TagDto` | `TagMapper.toDto` | `TagMapper.fromDto` |
+| `Named` | `Coverage.Tag`, `Coverage.Status` | `TagDto`, `StatusDto` | `TagMapper.toDto` | `TagMapper.fromDto` |
 | `ArrayOf` | `Tag[]`, `String[][]` | 要素の DTO 型の配列 | 要素ごとに変換（`Arrays.stream`、入れ子はラムダ） | 同左 |
 
 String は、CORBA サーバーが ISO-8859-1 として送ってくる自分の文字コード（既定は SJIS）のバイト列を読み替えるため、`--return-mode` によらず常に `StringMapper` を通します。文字コードは生成アプリの `corba.string-charset` で決まり、`--string-charset` はその既定値です（application.yml に書かれ、`@Value` の既定値にもなります）。`none` なら読み替えません。Mapper は静的メソッドから呼ぶため、`StringMapper` 自身を Bean にして、起動時に設定値を静的フィールドへ移します。`--return-mode=raw` のときは、戻り値と out 引数の Any と名前付きの型を変換せず CORBA 型のまま返します（リクエスト側は常に DTO です）。
+
+enum の DTO は Java の enum（`StatusDto`）なので、JSON では選択肢の名前の文字列（`"ACTIVE"`）になります。CORBA では宣言順の番号で送るため、Mapper は番号どうし（DTO の `ordinal()` と idlj のクラスの `value()` / `from_int`）で変換します。JSON に無い名前を送ると、Jackson が読み込めずに 400 Bad Request になります。`--return-mode=raw` では idlj の enum のクラスがそのまま返りますが、そのままでは Jackson が書けないため、選択肢の名前の文字列で書く Jackson のモジュール（`mapper/CorbaEnumJsonModule`）も生成します。
 
 この規則は `TypeMapping` の 1 か所だけで定義し、構造体 Mapper・Controller・RequestDto/RpcResult のすべてがそれを使います。
 
@@ -112,7 +115,8 @@ setupProject（プロジェクトごとに 1 回）
  ├─ スタブ一式をコピー（並列）
  ├─ dto/AnyValue.java、mapper/AnyMapper.java、mapper/StringMapper.java
  ├─ corba/CorbaOrb.java（アプリで 1 つの ORB）
- └─ 構造体ごとに dto/XxxDto.java、mapper/XxxMapper.java
+ ├─ 構造体・enum ごとに dto/XxxDto.java、mapper/XxxMapper.java
+ └─ --return-mode=raw で enum があれば mapper/CorbaEnumJsonModule.java
 generateService（サービスごと。操作が無ければ何もしない）
  ├─ 操作ごとに dto/XxxRequestDto・XxxRpcRequest・XxxRpcResult・XxxRpcResponse
  ├─ corba/CorbaClient.java（単一プロジェクト時は <サービス名>CorbaClient.java）
@@ -138,7 +142,7 @@ Tomcat 11.0.27 で、修正前は 2 つ目のアプリとパラレルデプロ�
 2. 引数を向きごとに用意する。
    - in: DTO → CORBA に変換する。
    - out: 空の Holder を用意する。
-   - inout: DTO → CORBA に変換した値を入れた Holder を用意する。string・struct・配列は省略すると CORBA に渡せないので、`params` に無ければ 400 Bad Request（`ResponseStatusException`）で止める。数値などのプリミティブは省略すると 0 や false になる。
+   - inout: DTO → CORBA に変換した値を入れた Holder を用意する。string・struct・enum・配列は省略すると CORBA に渡せないので、`params` に無ければ 400 Bad Request（`ResponseStatusException`）で止める。数値などのプリミティブは省略すると 0 や false になる。
 
    in / inout は `XxxRequestDto` に、out / inout は `XxxRpcResult` に現れる（inout は両方）。
 3. `CorbaClient` 経由で呼び出す。
@@ -148,8 +152,8 @@ Tomcat 11.0.27 で、修正前は 2 つ目のアプリとパラレルデプロ�
 
 Any は JSON では `{"type": 型名, "value": 値}`（`AnyValue`）で表し、両方向に変換します。
 
-- **CORBA → JSON（`toAnyValue`）**: TypeCode の種類ごとに値を取り出します。struct は、生成時に構造体ごとに登録したリポジトリ ID（idlj が付けたもの）で Helper と Mapper を引き、`type` に IDL 上の名前（例: `Coverage.Item`）を入れます。
-- **JSON → CORBA（`toAny`）**: `type` が基本型（`long`・`string` など）ならその型で入れます。IDL の構造体名なら、JSON の値（Jackson では `LinkedHashMap`）を DTO に読み替え、Mapper と Helper で Any に入れます。`any` は入れ子として再帰的に処理します。そのため、CORBA から返ってきた JSON をそのまま送り返せます。
+- **CORBA → JSON（`toAnyValue`）**: TypeCode の種類ごとに値を取り出します。struct と enum は、生成時に型ごとに登録したリポジトリ ID（idlj が付けたもの）で Helper と Mapper を引き、`type` に IDL 上の名前（例: `Coverage.Item`）を入れます。enum の `value` は選択肢の名前です。登録の無い enum は番号を入れます。
+- **JSON → CORBA（`toAny`）**: `type` が基本型（`long`・`string` など）ならその型で入れます。IDL の構造体名・enum 名なら、JSON の値（Jackson では `LinkedHashMap` や文字列）を DTO に読み替え、Mapper と Helper で Any に入れます。`any` は入れ子として再帰的に処理します。そのため、CORBA から返ってきた JSON をそのまま送り返せます。
 - sequence・union・objref などは、Any に入れる TypeCode を JSON から組み立てられないため、`toAny` では `IllegalArgumentException` にします（CORBA → JSON 方向は従来どおり）。
 - `string` は他の文字列と同じく `StringMapper` で文字コードの読み替えをします。
 - Any はアプリの ORB で作ります（理由は「ORB の持ち方」を参照）。アプリの ORB が無いときだけシングルトン ORB を使います。
@@ -184,7 +188,7 @@ REST ブリッジは、インターフェースで宣言した操作だけを公
  └─ src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
 ```
 
-- **クライアント（`XxxClient`）**: in / inout 引数をメソッドの引数に、戻り値を戻り値にします。out / inout 引数がある操作は、戻り値と out / inout 引数をまとめた record（`XxxClient.操作名Result`）を返します。inout の string・struct・配列が null なら `NullPointerException` にします。サービスのオブジェクト参照は最初の呼び出しで解決するので、CORBA サーバーが止まっていても利用側は起動できます。親のインターフェースから継承した操作（祖先の分も含む。ひし形の継承でも 1 回ずつ）もメソッドにします。
+- **クライアント（`XxxClient`）**: in / inout 引数をメソッドの引数に、戻り値を戻り値にします。out / inout 引数がある操作は、戻り値と out / inout 引数をまとめた record（`XxxClient.操作名Result`）を返します。inout の string・struct・enum・配列が null なら `NullPointerException` にします。サービスのオブジェクト参照は最初の呼び出しで解決するので、CORBA サーバーが止まっていても利用側は起動できます。親のインターフェースから継承した操作（祖先の分も含む。ひし形の継承でも 1 回ずつ）もメソッドにします。
 - **例外**: `raises` のユーザー例外は、DTO を `detail()` で持つ `XxxException`（名前が Exception で終わる exception はそのままの名前）に、CORBA のシステム例外は `CorbaCallException` に包み直します。どちらも `RuntimeException` です。
 - **ORB**: `CorbaConnection` が 1 つ持ち、閉じるときに破棄します。REST ブリッジの `CorbaOrb` と同じく、MBean を登録しない設定と、gmbal のシステムプロパティの設定をします。`corba.orb.*` は ORB にそのまま渡します。同じ Tomcat に利用アプリを複数置けますが、jar は Tomcat の共有 lib ではなく各アプリの `WEB-INF/lib` に置きます（`StringMapper` の文字コード設定が static のため）。
 - **Spring Boot**: 利用側が Spring Boot なら、jar を依存に入れるだけで自動設定が働きます。`CorbaConnection` を Bean にし（終了時に close）、`corba.<サービス名>.ior` が設定されたサービスだけクライアントを Bean にします。`corba.string-charset` は起動時に `StringMapper.configure` へ渡します。Spring Boot はコンパイル時だけの依存で、Spring を使わない利用者は `CorbaConnection` と `XxxClient` を自分で作ります。

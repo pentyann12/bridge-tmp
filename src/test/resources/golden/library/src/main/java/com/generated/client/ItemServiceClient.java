@@ -149,6 +149,27 @@ public final class ItemServiceClient {
     }
   }
 
+  public SetStatusResult setStatus(int id, com.generated.dto.StatusDto status) {
+    try {
+      com.corba.Coverage.StatusSeqHolder __history = new com.corba.Coverage.StatusSeqHolder();
+      com.corba.Coverage.Status __ret = stub().setStatus(id, com.generated.mapper.StatusMapper.fromDto(status), __history);
+      return new SetStatusResult(com.generated.mapper.StatusMapper.toDto(__ret), __history.value == null ? null : java.util.Arrays.stream(__history.value).map(com.generated.mapper.StatusMapper::toDto).toArray(com.generated.dto.StatusDto[]::new));
+    } catch (org.omg.CORBA.SystemException __e) {
+      throw new com.generated.exception.CorbaCallException("ItemService.setStatus", __e);
+    }
+  }
+
+  public CycleStatusResult cycleStatus(com.generated.dto.StatusDto status) {
+    try {
+      java.util.Objects.requireNonNull(status, "status");
+      com.corba.Coverage.StatusHolder __status = new com.corba.Coverage.StatusHolder(com.generated.mapper.StatusMapper.fromDto(status));
+      stub().cycleStatus(__status);
+      return new CycleStatusResult(com.generated.mapper.StatusMapper.toDto(__status.value));
+    } catch (org.omg.CORBA.SystemException __e) {
+      throw new com.generated.exception.CorbaCallException("ItemService.cycleStatus", __e);
+    }
+  }
+
   /** findItems の結果（戻り値とout/inout引数）。 */
   public record FindItemsResult(int returnValue, com.generated.dto.TagDto[] tags, String message) {}
 
@@ -163,4 +184,10 @@ public final class ItemServiceClient {
 
   /** outAny の結果（戻り値とout/inout引数）。 */
   public record OutAnyResult(com.generated.dto.AnyValue value) {}
+
+  /** setStatus の結果（戻り値とout/inout引数）。 */
+  public record SetStatusResult(com.generated.dto.StatusDto returnValue, com.generated.dto.StatusDto[] history) {}
+
+  /** cycleStatus の結果（戻り値とout/inout引数）。 */
+  public record CycleStatusResult(com.generated.dto.StatusDto status) {}
 }

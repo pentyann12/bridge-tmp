@@ -20,4 +20,6 @@ public class ItemDto {
   public String[] aliases;
 
   public PointDto location;
+
+  public StatusDto status;
 }

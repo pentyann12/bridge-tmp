@@ -1,6 +1,7 @@
 package com.toru_otsuki.bridge_generator.idl;
 
 import com.sun.tools.corba.ee.idl.AttributeEntry;
+import com.sun.tools.corba.ee.idl.EnumEntry;
 import com.sun.tools.corba.ee.idl.ExceptionEntry;
 import com.sun.tools.corba.ee.idl.InterfaceEntry;
 import com.sun.tools.corba.ee.idl.MethodEntry;
@@ -15,6 +16,7 @@ import com.sun.tools.corba.ee.idl.TypedefEntry;
 import com.sun.tools.corba.ee.idl.toJavaPortable.Util;
 import com.toru_otsuki.bridge_generator.model.CorbaType;
 import com.toru_otsuki.bridge_generator.model.Field;
+import com.toru_otsuki.bridge_generator.model.IdlEnum;
 import com.toru_otsuki.bridge_generator.model.IdlModel;
 import com.toru_otsuki.bridge_generator.model.Operation;
 import com.toru_otsuki.bridge_generator.model.Param;
@@ -40,7 +42,7 @@ final class ModelBuilder {
 
   private ModelBuilder() {}
 
-  /// トップレベルの定義から、module・interfaceの中も含めてサービスと構造体を集める
+  /// トップレベルの定義から、module・interfaceの中も含めてサービスと構造体とenumを集める
   ///
   /// @param topLevel 構文解析で得たトップレベルの定義
   /// @param idlNames 定義 → IDL上のスコープ付きの名前（[#idlNames]で求めたもの）
@@ -48,15 +50,25 @@ final class ModelBuilder {
   static IdlModel build(List<SymtabEntry> topLevel, Map<SymtabEntry, String> idlNames) {
     List<Service> services = new ArrayList<>();
     List<Struct> structs = new ArrayList<>();
+    List<IdlEnum> enums = new ArrayList<>();
     for (SymtabEntry entry : allEntries(topLevel)) {
       if (entry instanceof InterfaceEntry iface) {
         services.add(service(iface));
       } else if (entry instanceof StructEntry struct) {
         // exceptionもStructEntryで、Javaではフィールドだけのクラスになる
         structs.add(struct(struct, idlNames.get(struct)));
+      } else if (entry instanceof EnumEntry enumEntry) {
+        String javaName = Util.javaQualifiedName(enumEntry);
+        enums.add(
+            new IdlEnum(
+                packageName(javaName),
+                simpleName(javaName),
+                enumEntry.repositoryID().ID(),
+                idlNames.get(enumEntry),
+                List.copyOf(enumEntry.elements())));
       }
     }
-    return IdlModel.merge(List.of(new IdlModel(services, structs)));
+    return IdlModel.merge(List.of(new IdlModel(services, structs, enums)));
   }
 
   /// 各定義のIDL上のスコープ付きの名前をドットでつないで求める（例: `Coverage.Inner.Point`）
@@ -96,8 +108,7 @@ final class ModelBuilder {
 
   /// インターフェースの操作からサービスを作る。`attribute`は含めない
   ///
-  /// 継承した操作は`allMethods()`（親から順に、宣言した操作も含む）から宣言した操作を除いて求める。
-  /// ひし形の継承では同じ親の操作が2回入るので、同じ定義は1つにまとめる。
+  /// 継承した操作は`allMethods()`（親から順に、宣言した操作も含む）から宣言した操作を除いて求める。 ひし形の継承では同じ親の操作が2回入るので、同じ定義は1つにまとめる。
   private static Service service(InterfaceEntry iface) {
     String javaName = Util.javaQualifiedName(iface);
     Set<MethodEntry> declared = Collections.newSetFromMap(new IdentityHashMap<>());

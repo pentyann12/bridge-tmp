@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.toru_otsuki.bridge_generator.GenerationException;
 import com.toru_otsuki.bridge_generator.model.CorbaType;
+import com.toru_otsuki.bridge_generator.model.IdlEnum;
 import com.toru_otsuki.bridge_generator.model.IdlModel;
 import com.toru_otsuki.bridge_generator.model.Operation;
 import com.toru_otsuki.bridge_generator.model.Param;
@@ -109,6 +110,23 @@ class IdljCompilerTest {
     assertEquals("com.corba.Coverage.Inner", point.pkg());
   }
 
+  /// enumの選択肢が宣言順に入り、enumを参照する型は名前付きの型になることを確かめる
+  ///
+  /// @param stubs スタブの出力先
+  /// @throws Exception 生成に失敗した場合
+  @Test
+  void enumsAreModeled(@TempDir Path stubs) throws Exception {
+    IdlModel model = IdljCompiler.compile(COVERAGE_IDL, stubs, "com.corba");
+    IdlEnum status =
+        model.enums().stream().filter(e -> e.name().equals("Status")).findFirst().orElseThrow();
+    assertEquals(List.of("ACTIVE", "SUSPENDED", "CLOSED"), status.members());
+    assertEquals("IDL:toru-otsuki.example/Coverage/Status:1.0", status.repoId());
+    assertEquals("Coverage.Status", status.idlName());
+    assertEquals(
+        Optional.of(status.type()),
+        operation(service(model, "ItemService"), "setStatus").returnType());
+  }
+
   /// 操作の`raises`と、`exception`であることがモデルに入ることを確かめる
   ///
   /// @param stubs スタブの出力先
@@ -147,8 +165,7 @@ class IdljCompilerTest {
 
     Service supervised = service(model, "Supervised");
     assertEquals(List.of(), supervised.operations());
-    assertEquals(
-        List.of("fetch", "check", "audit", "approve"), names(supervised.allOperations()));
+    assertEquals(List.of("fetch", "check", "audit", "approve"), names(supervised.allOperations()));
   }
 
   private static List<String> names(List<Operation> operations) {

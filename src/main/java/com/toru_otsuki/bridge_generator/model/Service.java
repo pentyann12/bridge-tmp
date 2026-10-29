@@ -13,8 +13,7 @@ public record Service(
     String name, String pkg, List<Operation> operations, List<Operation> inheritedOperations) {
   /// 継承した操作と宣言した操作を合わせた一覧を返す（継承した操作が先）
   ///
-  /// RESTブリッジは単一プロジェクトのとき親と子で`/操作名`が重なるので[#operations]だけを使い、
-  /// 共有ライブラリはJavaのメソッドなので重ならず、こちらを使う。
+  /// RESTブリッジは単一プロジェクトのとき親と子で`/操作名`が重なるので[#operations]だけを使い、 共有ライブラリはJavaのメソッドなので重ならず、こちらを使う。
   ///
   /// @return すべての操作
   public List<Operation> allOperations() {

@@ -49,7 +49,8 @@ record BridgeGenerator(CliOptions options) {
             options.returnAsDto(),
             options.stringCharset(),
             stubRoot,
-            model.structs());
+            model.structs(),
+            model.enums());
     List<Path> generated = new ArrayList<>();
     if (options.target() == Target.LIBRARY) {
       Path output = options.outputRoot().resolve(options.projectName());

@@ -224,5 +224,44 @@ public class ItemServiceController {
     return __response;
   }
 
+  @PostMapping("/setStatus")
+  public com.generated.dto.SetStatusRpcResponse setStatus(@RequestBody com.generated.dto.SetStatusRpcRequest rpc) {
+    if (rpc.params == null) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "params は必須です");
+    }
+    com.generated.dto.SetStatusRequestDto req = rpc.params;
+    int arg0 = req.id;
+    com.corba.Coverage.Status arg1 = com.generated.mapper.StatusMapper.fromDto(req.status);
+    com.corba.Coverage.StatusSeqHolder arg2 = new com.corba.Coverage.StatusSeqHolder();
+    com.corba.Coverage.Status callResult = client.setStatus(arg0, arg1, arg2);
+    com.generated.dto.SetStatusRpcResult __result = new com.generated.dto.SetStatusRpcResult();
+    __result.returnValue = com.generated.mapper.StatusMapper.toDto(callResult);
+    __result.history = arg2.value == null ? null : java.util.Arrays.stream(arg2.value).map(com.generated.mapper.StatusMapper::toDto).toArray(com.generated.dto.StatusDto[]::new);
+    com.generated.dto.SetStatusRpcResponse __response = new com.generated.dto.SetStatusRpcResponse();
+    __response.result = __result;
+    return __response;
+  }
+
+  @PostMapping("/cycleStatus")
+  public com.generated.dto.CycleStatusRpcResponse cycleStatus(@RequestBody com.generated.dto.CycleStatusRpcRequest rpc) {
+    if (rpc.params == null) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "params は必須です");
+    }
+    com.generated.dto.CycleStatusRequestDto req = rpc.params;
+    if (req.status == null) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "params.status は必須です（inout引数）");
+    }
+    com.corba.Coverage.StatusHolder arg0 = new com.corba.Coverage.StatusHolder(com.generated.mapper.StatusMapper.fromDto(req.status));
+    client.cycleStatus(arg0);
+    com.generated.dto.CycleStatusRpcResult __result = new com.generated.dto.CycleStatusRpcResult();
+    __result.status = com.generated.mapper.StatusMapper.toDto(arg0.value);
+    com.generated.dto.CycleStatusRpcResponse __response = new com.generated.dto.CycleStatusRpcResponse();
+    __response.result = __result;
+    return __response;
+  }
+
 
 }

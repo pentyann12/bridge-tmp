@@ -16,7 +16,7 @@ public sealed interface CorbaType {
   /// IDLの`any`（`org.omg.CORBA.Any`）。DTO側は`AnyValue`で表す。
   record AnyType() implements CorbaType {}
 
-  /// IDLで定義された名前付きの型（主に`struct`）。DTO側は`単純名Dto`、変換は`単純名Mapper`で行う。
+  /// IDLで定義された名前付きの型（`struct`・`exception`・`enum`）。DTO側は`単純名Dto`、変換は`単純名Mapper`で行う。
   ///
   /// @param pkg Javaパッケージ名（デフォルトパッケージなら空文字列）
   /// @param simpleName クラスの単純名

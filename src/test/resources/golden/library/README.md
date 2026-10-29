@@ -97,7 +97,7 @@ class MyService {
 `any` 型は `com.generated.dto.AnyValue`（型名と値の組）で受け渡します。
 
 ```java
-AnyValue v = AnyValue.of(tagDto);                  // 構造体のDTOから作る（型名は自動で決まる）
+AnyValue v = AnyValue.of(tagDto);                  // 構造体・enumのDTOから作る（型名は自動で決まる）
 AnyValue n = new AnyValue("long", 42);              // 基本型は型名を指定する
 Optional<TagDto> tag = v.as(TagDto.class);          // 型を指定して取り出す
 ```

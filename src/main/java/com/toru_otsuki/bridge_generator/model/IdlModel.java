@@ -11,7 +11,8 @@ import java.util.Map;
 ///
 /// @param services サービス（IDLの`interface`）
 /// @param structs DTOとMapperを生成する型
-public record IdlModel(List<Service> services, List<Struct> structs) {
+/// @param enums DTO（Javaのenum）とMapperを生成するenum
+public record IdlModel(List<Service> services, List<Struct> structs, List<IdlEnum> enums) {
 
   /// 複数のIDLファイルから得たモデルを1つにまとめる
   ///
@@ -23,11 +24,13 @@ public record IdlModel(List<Service> services, List<Struct> structs) {
   public static IdlModel merge(Collection<IdlModel> models) {
     Map<String, Service> services = new LinkedHashMap<>();
     Map<String, Struct> structs = new LinkedHashMap<>();
+    Map<String, IdlEnum> enums = new LinkedHashMap<>();
     for (IdlModel m : models) {
       m.services().forEach(s -> services.putIfAbsent(path(s.pkg(), s.name() + "Operations"), s));
       m.structs().forEach(s -> structs.putIfAbsent(path(s.pkg(), s.name()), s));
+      m.enums().forEach(e -> enums.putIfAbsent(path(e.pkg(), e.name()), e));
     }
-    return new IdlModel(sorted(services), sorted(structs));
+    return new IdlModel(sorted(services), sorted(structs), sorted(enums));
   }
 
   private static String path(String pkg, String name) {

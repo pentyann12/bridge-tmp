@@ -1,5 +1,6 @@
 package com.toru_otsuki.bridge_generator.gen;
 
+import com.toru_otsuki.bridge_generator.model.IdlEnum;
 import com.toru_otsuki.bridge_generator.model.Operation;
 import com.toru_otsuki.bridge_generator.model.Service;
 import com.toru_otsuki.bridge_generator.model.Struct;
@@ -66,13 +67,17 @@ public final class SpringBootProjectGenerator {
     ProjectScaffolder.writeServletClass(ctx.basePackage(), ctx.packageDir());
     StubFiles.copyIdlStubSources(settings.stubRoot(), ctx.javaDir());
     AnyTypeWriter.writeAnyValueDto(ctx, Target.REST);
-    AnyTypeWriter.writeAnyMapper(ctx, settings.structs(), Target.REST);
+    AnyTypeWriter.writeAnyMapper(ctx, settings.structs(), settings.enums(), Target.REST);
     StringMapperWriter.write(ctx);
     CorbaClientWriter.writeOrb(ctx);
     for (Struct struct : settings.structs()) {
       DtoGenerator.generate(struct, ctx);
       MapperGenerator.generate(struct, ctx);
     }
+    for (IdlEnum idlEnum : settings.enums()) {
+      EnumGenerator.generate(idlEnum, ctx);
+    }
+    EnumGenerator.writeRawJsonModule(settings.enums(), ctx);
     return ctx;
   }
 

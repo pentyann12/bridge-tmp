@@ -18,6 +18,7 @@ public final class ItemMapper {
     dto.tags = src.tags == null ? null : java.util.Arrays.stream(src.tags).map(TagMapper::toDto).toArray(TagDto[]::new);
     dto.aliases = src.aliases == null ? null : java.util.Arrays.stream(src.aliases).map(StringMapper::encode).toArray(String[]::new);
     dto.location = PointMapper.toDto(src.location);
+    dto.status = StatusMapper.toDto(src.status);
     return dto;
   }
 
@@ -33,6 +34,7 @@ public final class ItemMapper {
     dst.tags = src.tags == null ? null : java.util.Arrays.stream(src.tags).map(TagMapper::fromDto).toArray(Tag[]::new);
     dst.aliases = src.aliases == null ? null : java.util.Arrays.stream(src.aliases).map(StringMapper::decode).toArray(String[]::new);
     dst.location = PointMapper.fromDto(src.location);
+    dst.status = StatusMapper.fromDto(src.status);
     return dst;
   }
 }

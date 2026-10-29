@@ -21,6 +21,10 @@ module Coverage {
     };
   };
 
+  // JSONでは選択肢の名前の文字列、CORBAでは番号で送る
+  enum Status { ACTIVE, SUSPENDED, CLOSED };
+  typedef sequence<Status> StatusSeq;
+
   struct Item {
     long id;
     string name;
@@ -32,6 +36,7 @@ module Coverage {
     TagSeq tags;
     GlobalNames aliases;
     Inner::Point location;
+    Status status;
   };
 
   interface ItemService {
@@ -48,6 +53,8 @@ module Coverage {
     GlobalNames globalNames(in GlobalNames names);
     Inner::Point movePoint(in Inner::Point p, out Inner::Point previous);
     void outAny(out any value);
+    Status setStatus(in long id, in Status status, out StatusSeq history);
+    void cycleStatus(inout Status status);
   };
 
   interface EmptyService {

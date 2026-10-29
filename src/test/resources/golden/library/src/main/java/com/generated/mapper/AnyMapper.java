@@ -47,20 +47,20 @@ public final class AnyMapper {
     KIND_HANDLERS = java.util.Collections.unmodifiableMap(m);
   }
 
-  private static final java.util.Map<String, java.util.function.Function<Any, AnyValue>> STRUCT_HANDLERS;
-  private static final java.util.Map<String, java.util.function.Function<Object, Any>> STRUCT_INSERTERS;
+  private static final java.util.Map<String, java.util.function.Function<Any, AnyValue>> TYPE_HANDLERS;
+  private static final java.util.Map<String, java.util.function.Function<Object, Any>> TYPE_INSERTERS;
   private static final java.util.Map<Class<?>, String> DTO_TYPES;
   static {
     java.util.Map<String, java.util.function.Function<Any, AnyValue>> m = new java.util.HashMap<>();
     java.util.Map<String, java.util.function.Function<Object, Any>> r = new java.util.HashMap<>();
     java.util.Map<Class<?>, String> t = new java.util.HashMap<>();
-    initStructHandlers0(m, r, t);
-    STRUCT_HANDLERS = java.util.Collections.unmodifiableMap(m);
-    STRUCT_INSERTERS = java.util.Collections.unmodifiableMap(r);
+    initTypeHandlers0(m, r, t);
+    TYPE_HANDLERS = java.util.Collections.unmodifiableMap(m);
+    TYPE_INSERTERS = java.util.Collections.unmodifiableMap(r);
     DTO_TYPES = java.util.Collections.unmodifiableMap(t);
   }
 
-  private static void initStructHandlers0(
+  private static void initTypeHandlers0(
       java.util.Map<String, java.util.function.Function<Any, AnyValue>> m,
       java.util.Map<String, java.util.function.Function<Object, Any>> r,
       java.util.Map<Class<?>, String> t) {
@@ -79,6 +79,9 @@ public final class AnyMapper {
     m.put("IDL:toru-otsuki.example/Errors/NotFound:1.0", any -> new AnyValue("Errors.NotFound", com.generated.mapper.NotFoundMapper.toDto(com.corba.Errors.NotFoundHelper.extract(any))));
     r.put("Errors.NotFound", v -> { Any any = newAny(); com.corba.Errors.NotFoundHelper.insert(any, com.generated.mapper.NotFoundMapper.fromDto((com.generated.dto.NotFoundDto) v)); return any; });
     t.put(com.generated.dto.NotFoundDto.class, "Errors.NotFound");
+    m.put("IDL:toru-otsuki.example/Coverage/Status:1.0", any -> new AnyValue("Coverage.Status", com.generated.mapper.StatusMapper.toDto(com.corba.Coverage.StatusHelper.extract(any))));
+    r.put("Coverage.Status", v -> { Any any = newAny(); com.corba.Coverage.StatusHelper.insert(any, com.generated.mapper.StatusMapper.fromDto((com.generated.dto.StatusDto) v)); return any; });
+    t.put(com.generated.dto.StatusDto.class, "Coverage.Status");
   }
 
   public static String typeNameOf(Class<?> dtoClass) {
@@ -120,7 +123,7 @@ public final class AnyMapper {
       case "wstring": any.insert_wstring(String.valueOf(dto.value())); break;
       case "any": any.insert_any(toAny((AnyValue) dto.value())); break;
       default:
-        java.util.function.Function<Object, Any> inserter = STRUCT_INSERTERS.get(dto.type());
+        java.util.function.Function<Object, Any> inserter = TYPE_INSERTERS.get(dto.type());
         if (inserter == null) {
           throw new IllegalArgumentException("AnyValue.type「" + dto.type() + "」はCORBAのAnyに変換できません");
         }
@@ -143,7 +146,7 @@ public final class AnyMapper {
   private static AnyValue extractStruct(Any any) {
     try {
       String id = any.type().id();
-      java.util.function.Function<Any, AnyValue> h = STRUCT_HANDLERS.get(id);
+      java.util.function.Function<Any, AnyValue> h = TYPE_HANDLERS.get(id);
       return h != null ? h.apply(any) : new AnyValue("struct", null);
     } catch (org.omg.CORBA.TypeCodePackage.BadKind e) {
       return new AnyValue("struct", null);
@@ -184,7 +187,8 @@ public final class AnyMapper {
 
   private static AnyValue extractEnum(Any any) {
     try {
-      return new AnyValue("enum", any.extract_long());
+      java.util.function.Function<Any, AnyValue> h = TYPE_HANDLERS.get(any.type().id());
+      return h != null ? h.apply(any) : new AnyValue("enum", any.create_input_stream().read_ulong());
     } catch (Exception e) {
       return new AnyValue("enum", null);
     }

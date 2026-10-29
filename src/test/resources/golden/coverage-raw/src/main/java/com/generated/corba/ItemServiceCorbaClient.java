@@ -66,4 +66,12 @@ public class ItemServiceCorbaClient {
     service.outAny(value);
   }
 
+  public Coverage.Status setStatus(int id, Coverage.Status status, Coverage.StatusSeqHolder history) {
+    return service.setStatus(id, status, history);
+  }
+
+  public void cycleStatus(Coverage.StatusHolder status) {
+    service.cycleStatus(status);
+  }
+
 }

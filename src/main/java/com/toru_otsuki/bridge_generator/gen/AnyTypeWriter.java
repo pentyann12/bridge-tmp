@@ -1,5 +1,6 @@
 package com.toru_otsuki.bridge_generator.gen;
 
+import com.toru_otsuki.bridge_generator.model.IdlEnum;
 import com.toru_otsuki.bridge_generator.model.Struct;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -8,11 +9,20 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 /// `org.omg.CORBA.Any`とJSONで受け渡す`AnyValue`との相互変換コードを生成するユーティリティ
 final class AnyTypeWriter {
-  /// 1つの`initStructHandlersN`メソッドに詰める構造体の最大数。構造体が多いと1メソッドがJVMの64KB上限を超えるため分割する。
-  private static final int STRUCT_CHUNK = 50;
+  /// 1つの`initTypeHandlersN`メソッドに詰める型の最大数。型が多いと1メソッドがJVMの64KB上限を超えるため分割する。
+  private static final int TYPE_CHUNK = 50;
+
+  /// Anyとの変換を型ごとに登録する、IDLで定義した型（構造体・exception・enum）
+  ///
+  /// @param pkg Javaパッケージ名
+  /// @param name Javaのクラス名
+  /// @param repoId リポジトリID
+  /// @param idlName IDL上のスコープ付きの名前
+  private record NamedType(String pkg, String name, String repoId, String idlName) {}
 
   private AnyTypeWriter() {}
 
@@ -47,18 +57,18 @@ final class AnyTypeWriter {
               /**
                * CORBAのAnyに入れる値（型名と値の組）。
                *
-               * <p>typeは基本型なら"long"・"string"など、構造体ならIDL上の名前（例: "Coverage.Item"）。構造体のvalueはそのDTO。
+               * <p>typeは基本型なら"long"・"string"など、構造体・enumならIDL上の名前（例: "Coverage.Item"）。構造体・enumのvalueはそのDTO。
                */
               public record AnyValue(String type, Object value) {
                 /**
-                 * 構造体のDTOから、型名を補ってAnyValueを作る。
+                 * 構造体・enumのDTOから、型名を補ってAnyValueを作る。
                  *
                  * @throws IllegalArgumentException このライブラリが知らないクラスの場合
                  */
                 public static AnyValue of(Object dto) {
                   String type = %1$s.mapper.AnyMapper.typeNameOf(dto.getClass());
                   if (type == null) {
-                    throw new IllegalArgumentException(dto.getClass().getName() + " はAnyに入れられる構造体のDTOではありません");
+                    throw new IllegalArgumentException(dto.getClass().getName() + " はAnyに入れられる構造体・enumのDTOではありません");
                   }
                   return new AnyValue(type, dto);
                 }
@@ -80,8 +90,8 @@ final class AnyTypeWriter {
 
   /// AnyとAnyValueを相互変換するAnyMapperクラスを出力する
   ///
-  /// 基本型はTypeCodeの種類（Any → JSON）や`type`の文字列（JSON → Any）で決まる変換をする。structは種類だけでは中身の型が
-  /// 分からないので、構造体ごとに両方向の変換を登録する。
+  /// 基本型はTypeCodeの種類（Any → JSON）や`type`の文字列（JSON → Any）で決まる変換をする。structとenumは種類だけでは
+  /// 中身の型が分からないので、型ごとに両方向の変換を登録する。
   ///
   /// - Any → JSON: リポジトリID（IDLコンパイラが付けた正確な値）で引き、Helperで取り出してMapperでDTOにする。
   ///   `type`にはIDL上のスコープ付きの名前を入れる。
@@ -100,22 +110,27 @@ final class AnyTypeWriter {
   ///
   /// @param ctx コード生成コンテキスト
   /// @param structs DTO/Mapperを生成する構造体
+  /// @param enums DTO/Mapperを生成するenum
   /// @param target 生成するプロジェクトの種類
   /// @throws IOException ファイルの書き込みに失敗した場合
-  static void writeAnyMapper(GenContext ctx, List<Struct> structs, Target target)
-      throws IOException {
+  static void writeAnyMapper(
+      GenContext ctx, List<Struct> structs, List<IdlEnum> enums, Target target) throws IOException {
     String pkg = ctx.basePackage() + ".mapper";
     boolean library = target == Target.LIBRARY;
 
+    Stream<NamedType> namedTypes =
+        Stream.concat(
+            structs.stream().map(s -> new NamedType(s.pkg(), s.name(), s.repoId(), s.idlName())),
+            enums.stream().map(e -> new NamedType(e.pkg(), e.name(), e.repoId(), e.idlName())));
     List<String> entries =
-        structs.stream()
+        namedTypes
             .map(
-                struct -> {
-                  String className = struct.name();
+                type -> {
+                  String className = type.name();
                   String helperFqn =
-                      struct.pkg().isEmpty()
+                      type.pkg().isEmpty()
                           ? className + "Helper"
-                          : struct.pkg() + "." + className + "Helper";
+                          : type.pkg() + "." + className + "Helper";
                   String mapperFqn = pkg + "." + className + "Mapper";
                   String dtoFqn = ctx.basePackage() + ".dto." + className + "Dto";
                   String dtoValue =
@@ -134,42 +149,42 @@ final class AnyTypeWriter {
                         """;
                   }
                   return entry.formatted(
-                      struct.repoId(), struct.idlName(), mapperFqn, helperFqn, dtoFqn, dtoValue);
+                      type.repoId(), type.idlName(), mapperFqn, helperFqn, dtoFqn, dtoValue);
                 })
             .toList();
 
-    // 登録処理をSTRUCT_CHUNK件ずつinitStructHandlersNメソッドに分け、static初期化子から順に呼ぶ
+    // 登録処理をTYPE_CHUNK件ずつinitTypeHandlersNメソッドに分け、static初期化子から順に呼ぶ
     String typeTableParam = library ? ",\n      java.util.Map<Class<?>, String> t" : "";
     List<String> chunkMethods = new ArrayList<>();
-    for (int i = 0; i < entries.size(); i += STRUCT_CHUNK) {
+    for (int i = 0; i < entries.size(); i += TYPE_CHUNK) {
       chunkMethods.add(
           """
-            private static void initStructHandlers%d(
+            private static void initTypeHandlers%d(
                 java.util.Map<String, java.util.function.Function<Any, AnyValue>> m,
                 java.util.Map<String, java.util.function.Function<Object, Any>> r%s) {
           %s  }
           """
               .formatted(
-                  i / STRUCT_CHUNK,
+                  i / TYPE_CHUNK,
                   typeTableParam,
-                  String.join("", entries.subList(i, Math.min(i + STRUCT_CHUNK, entries.size())))));
+                  String.join("", entries.subList(i, Math.min(i + TYPE_CHUNK, entries.size())))));
     }
 
     String initCalls =
         IntStream.range(0, chunkMethods.size())
-            .mapToObj(i -> "    initStructHandlers%d(m, r%s);\n".formatted(i, library ? ", t" : ""))
+            .mapToObj(i -> "    initTypeHandlers%d(m, r%s);\n".formatted(i, library ? ", t" : ""))
             .collect(Collectors.joining());
     String typeTable =
         library ? "  private static final java.util.Map<Class<?>, String> DTO_TYPES;\n" : "";
-    String structHandlersBlock =
+    String typeHandlersBlock =
         """
-          private static final java.util.Map<String, java.util.function.Function<Any, AnyValue>> STRUCT_HANDLERS;
-          private static final java.util.Map<String, java.util.function.Function<Object, Any>> STRUCT_INSERTERS;
+          private static final java.util.Map<String, java.util.function.Function<Any, AnyValue>> TYPE_HANDLERS;
+          private static final java.util.Map<String, java.util.function.Function<Object, Any>> TYPE_INSERTERS;
         %s  static {
             java.util.Map<String, java.util.function.Function<Any, AnyValue>> m = new java.util.HashMap<>();
             java.util.Map<String, java.util.function.Function<Object, Any>> r = new java.util.HashMap<>();
-        %s%s    STRUCT_HANDLERS = java.util.Collections.unmodifiableMap(m);
-            STRUCT_INSERTERS = java.util.Collections.unmodifiableMap(r);
+        %s%s    TYPE_HANDLERS = java.util.Collections.unmodifiableMap(m);
+            TYPE_INSERTERS = java.util.Collections.unmodifiableMap(r);
         %s  }
 
         %s"""
@@ -182,7 +197,7 @@ final class AnyTypeWriter {
                 library ? "    DTO_TYPES = java.util.Collections.unmodifiableMap(t);\n" : "",
                 String.join("\n", chunkMethods));
 
-    // 構造体の登録処理は件数で形が変わるので、テンプレート中の//@@STRUCT_HANDLERS@@行を後から差し替える
+    // 型ごとの登録処理は件数で形が変わるので、テンプレート中の//@@TYPE_HANDLERS@@行を後から差し替える
     String content =
         """
         package %s;
@@ -234,7 +249,7 @@ final class AnyTypeWriter {
             KIND_HANDLERS = java.util.Collections.unmodifiableMap(m);
           }
 
-          //@@STRUCT_HANDLERS@@
+          //@@TYPE_HANDLERS@@
 
           @TARGET_MEMBERS@
 
@@ -273,7 +288,7 @@ final class AnyTypeWriter {
               case "wstring": any.insert_wstring(String.valueOf(@V@)); break;
               case "any": any.insert_any(@ANY_VALUE@); break;
               default:
-                java.util.function.Function<Object, Any> inserter = STRUCT_INSERTERS.get(@T@);
+                java.util.function.Function<Object, Any> inserter = TYPE_INSERTERS.get(@T@);
                 if (inserter == null) {
                   throw new IllegalArgumentException("AnyValue.type「" + @T@ + "」はCORBAのAnyに変換できません");
                 }
@@ -296,7 +311,7 @@ final class AnyTypeWriter {
           private static AnyValue extractStruct(Any any) {
             try {
               String id = any.type().id();
-              java.util.function.Function<Any, AnyValue> h = STRUCT_HANDLERS.get(id);
+              java.util.function.Function<Any, AnyValue> h = TYPE_HANDLERS.get(id);
               return h != null ? h.apply(any) : new AnyValue("struct", null);
             } catch (org.omg.CORBA.TypeCodePackage.BadKind e) {
               return new AnyValue("struct", null);
@@ -337,7 +352,8 @@ final class AnyTypeWriter {
 
           private static AnyValue extractEnum(Any any) {
             try {
-              return new AnyValue("enum", any.extract_long());
+              java.util.function.Function<Any, AnyValue> h = TYPE_HANDLERS.get(any.type().id());
+              return h != null ? h.apply(any) : new AnyValue("enum", any.create_input_stream().read_ulong());
             } catch (Exception e) {
               return new AnyValue("enum", null);
             }
@@ -409,7 +425,7 @@ final class AnyTypeWriter {
         }
         """
             .formatted(pkg, ctx.basePackage())
-            .replace("  //@@STRUCT_HANDLERS@@\n", structHandlersBlock)
+            .replace("  //@@TYPE_HANDLERS@@\n", typeHandlersBlock)
             // RESTのAnyValueは公開フィールドを持つクラスで、入れ子のanyの値はJSONから読んだMapになっている。
             // ライブラリのAnyValueはrecordで、入れ子のanyの値はAnyValueそのもの
             .replace("@T@", library ? "dto.type()" : "dto.type")
