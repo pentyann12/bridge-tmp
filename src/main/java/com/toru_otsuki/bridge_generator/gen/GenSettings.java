@@ -13,15 +13,17 @@ import java.util.List;
 /// @param stubRoot idlj生成スタブのルートディレクトリ（生成プロジェクトへコピーする）
 /// @param structs DTO/Mapperを生成する構造体
 /// @param enums DTO/Mapperを生成するenum
+/// @param naming 利用者が使うクラスの名前の付け方
 public record GenSettings(
     String basePackage,
     boolean returnAsDto,
     String stringCharset,
     Path stubRoot,
     List<Struct> structs,
-    List<IdlEnum> enums) {
+    List<IdlEnum> enums,
+    Naming naming) {
 
   TypeMapping types() {
-    return new TypeMapping(basePackage);
+    return new TypeMapping(basePackage, naming);
   }
 }

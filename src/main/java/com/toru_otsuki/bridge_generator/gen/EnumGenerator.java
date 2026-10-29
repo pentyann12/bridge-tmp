@@ -26,7 +26,7 @@ final class EnumGenerator {
   /// @throws IOException ファイルの書き込みに失敗した場合
   static void generate(IdlEnum idlEnum, GenContext ctx) throws IOException {
     TypeMapping types = ctx.types();
-    ClassName dtoClass = types.dtoClass(idlEnum.name() + "Dto");
+    ClassName dtoClass = types.dtoClass(idlEnum.type());
     ClassName corbaClass = ClassName.get(idlEnum.pkg(), idlEnum.name());
 
     TypeSpec.Builder dto = TypeSpec.enumBuilder(dtoClass).addModifiers(Modifier.PUBLIC);

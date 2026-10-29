@@ -1,5 +1,6 @@
 package com.toru_otsuki.bridge_generator.gen;
 
+import com.toru_otsuki.bridge_generator.model.CorbaType;
 import com.toru_otsuki.bridge_generator.model.IdlEnum;
 import com.toru_otsuki.bridge_generator.model.Struct;
 import java.io.IOException;
@@ -132,7 +133,10 @@ final class AnyTypeWriter {
                           ? className + "Helper"
                           : type.pkg() + "." + className + "Helper";
                   String mapperFqn = pkg + "." + className + "Mapper";
-                  String dtoFqn = ctx.basePackage() + ".dto." + className + "Dto";
+                  String dtoFqn =
+                      ctx.types()
+                          .dtoClass(new CorbaType.Named(type.pkg(), className))
+                          .canonicalName();
                   String dtoValue =
                       library
                           ? "(%s) v".formatted(dtoFqn)

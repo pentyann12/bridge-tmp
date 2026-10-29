@@ -30,9 +30,11 @@
 - `--string-charset`: CORBAサーバーが文字列に使う文字コード（既定値 `SJIS`。`Windows-31J` などJavaの文字コード名か、読み替えない場合は `none`）。生成アプリの `application.yml` の `corba.string-charset` に書かれ、生成し直さずに設定や起動引数（`--corba.string-charset=...`）で変更できます。
 - `--single-project`: 全サービスを1つのSpring Bootプロジェクトにまとめます。指定しない場合はサービスごとに `<サービス名>Api` プロジェクトを生成します。
 - `--project-name`: `--single-project` 時・共有ライブラリのプロジェクト名（既定値は `CombinedApi`、共有ライブラリでは `corba-client`）。
+- `--dto-prefix` / `--dto-suffix`: 構造体・enumのDTOのクラス名の前後に付ける文字列（既定値はプレフィックスなし・サフィックス `Dto`。例 `ItemDto`）。空にもでき、空ならidljのクラスと同じ名前（パッケージは別）になります。
+- `--result-prefix` / `--result-suffix`: 共有ライブラリで、out/inout引数がある操作の結果のrecord名の前後に付ける文字列（既定値はプレフィックスなし・サフィックス `Result`。例 `FindItemsResult`）。空にもできます。
 - `idl/service.idl`: 解析するIDLファイルのパス。
 
-不明なオプションや不正な値を渡すと、使い方を表示して終了コード 2 で終了します。
+不明なオプションや不正な値を渡すと、使い方を表示して終了コード 2 で終了します。DTOや結果のrecordの名前がほかのクラスと重なる場合（`java.lang` のクラス、RESTブリッジの操作ごとのクラス、別のmoduleにある同じ名前の型など）や、IDLのJavaパッケージが生成するパッケージと同じ場合も、生成せずにエラーにします。
 
 内部の処理の流れは [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) を参照してください。
 

@@ -146,6 +146,7 @@ final class LibraryScaffolder {
             .map(s -> "  %s:\n    ior: IOR:...".formatted(s.name()))
             .collect(Collectors.joining("\n"));
     String example = services.isEmpty() ? "ItemService" : services.get(0).name();
+    Naming naming = ctx.settings().naming();
 
     Files.writeString(
         ctx.outputDir().resolve("README.md"),
@@ -217,8 +218,8 @@ final class LibraryScaffolder {
         }
         ```
 
-        - 引数・戻り値は、構造体ならDTO（`%6$s.dto.XxxDto`）、文字列は `String` です。
-        - out/inout引数がある操作は、戻り値とout/inout引数をまとめたrecord（`XxxClient.操作名Result`）を返します。
+        - 引数・戻り値は、構造体・enumならDTO（`%6$s.dto.%7$s`）、文字列は `String` です。
+        - out/inout引数がある操作は、戻り値とout/inout引数をまとめたrecord（`XxxClient.%8$s`）を返します。
         - サービスへの接続は、最初の呼び出しのときに行います。CORBAサーバーが止まっていてもアプリは起動できます。
 
         ### 例外
@@ -233,9 +234,12 @@ final class LibraryScaffolder {
         `any` 型は `%6$s.dto.AnyValue`（型名と値の組）で受け渡します。
 
         ```java
-        AnyValue v = AnyValue.of(tagDto);                  // 構造体・enumのDTOから作る（型名は自動で決まる）
-        AnyValue n = new AnyValue("long", 42);              // 基本型は型名を指定する
-        Optional<TagDto> tag = v.as(TagDto.class);          // 型を指定して取り出す
+        // 構造体・enumのDTOから作る（型名は自動で決まる）
+        AnyValue v = AnyValue.of(tag);
+        // 基本型は型名を指定する
+        AnyValue n = new AnyValue("long", 42);
+        // 型を指定して取り出す
+        Optional<%9$s> t = v.as(%9$s.class);
         ```
 
         sequence・union などはAnyに入れて送れません（受け取りはできます）。
@@ -251,7 +255,16 @@ final class LibraryScaffolder {
 
         文字コードを変えるときは、最初の呼び出しの前に `StringMapper.configure("Windows-31J")` を呼びます。
         """
-            .formatted(projectName, ctx.settings().stringCharset(), iors, clients, example, base));
+            .formatted(
+                projectName,
+                ctx.settings().stringCharset(),
+                iors,
+                clients,
+                example,
+                base,
+                naming.dtoName("Xxx"),
+                naming.resultPrefix() + "操作名" + naming.resultSuffix(),
+                naming.dtoName("Tag")));
   }
 
   private static String beanName(Service service) {

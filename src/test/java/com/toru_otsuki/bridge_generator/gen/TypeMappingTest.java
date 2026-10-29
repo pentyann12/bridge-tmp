@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 /// [TypeMapping]の型名・変換式のテスト
 class TypeMappingTest {
   /// ベースパッケージ`b`の型の対応付け
-  private static final TypeMapping TYPES = new TypeMapping("b");
+  private static final TypeMapping TYPES = new TypeMapping("b", Naming.DEFAULT);
 
   private static final CodeBlock X = CodeBlock.of("x");
 

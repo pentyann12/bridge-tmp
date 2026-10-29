@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -86,6 +87,38 @@ class GeneratedCodeCompilesTest {
             TestGeneration.COVERAGE_IDL.toString(),
             TestGeneration.ERRORS_IDL.toString());
     assertCompiles(result.singleProject(), tmp.resolve("classes"));
+  }
+
+  /// DTOと結果のrecordの名前を変えても（空にしてidljのクラスと同じ名前にしても）、RESTブリッジと共有ライブラリがコンパイルできることを確かめる
+  ///
+  /// @param target `--target`の値
+  /// @param tmp 作業ディレクトリ
+  /// @throws Exception 生成やコンパイルの準備に失敗した場合
+  @ParameterizedTest(name = "{0}")
+  @ValueSource(strings = {"rest", "library"})
+  void customNamingCompiles(String target, @TempDir Path tmp) throws Exception {
+    List<String> args =
+        new ArrayList<>(
+            List.of(
+                "--target=" + target,
+                "--single-project",
+                "--idl-package-prefix=com.corba",
+                "--dto-suffix=",
+                "--result-prefix=Cx",
+                "--result-suffix=",
+                TestGeneration.COVERAGE_IDL.toString()));
+    // RESTブリッジはraisesに対応していないので、例外クラスとDTOが同じ名前になるのは共有ライブラリだけで確かめる
+    if (target.equals("library")) args.add(TestGeneration.ERRORS_IDL.toString());
+    TestGeneration.Result result = TestGeneration.run(tmp, args.toArray(String[]::new));
+    Path project = result.singleProject();
+    assertTrue(Files.exists(project.resolve("src/main/java/com/generated/dto/Item.java")));
+    if (target.equals("library")) {
+      assertTrue(
+          Files.readString(
+                  project.resolve("src/main/java/com/generated/client/ItemServiceClient.java"))
+              .contains("public record CxFindItems("));
+    }
+    assertCompiles(project, tmp.resolve("classes"));
   }
 
   /// プロジェクトのJavaソースをコンパイルし、エラーがあればその内容を添えて失敗させる

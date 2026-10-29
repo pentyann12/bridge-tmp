@@ -8,14 +8,14 @@ import com.toru_otsuki.bridge_generator.model.Struct;
 import java.io.IOException;
 import javax.lang.model.element.Modifier;
 
-/// 構造体ごとのDTOクラス（`XxxDto`）を生成する
+/// 構造体ごとのDTOクラス（`XxxDto`。名前は[Naming]で変えられる）を生成する
 final class DtoGenerator {
   private DtoGenerator() {}
 
   static void generate(Struct struct, GenContext ctx) throws IOException {
     TypeMapping types = ctx.types();
     TypeSpec.Builder dto =
-        TypeSpec.classBuilder(struct.name() + "Dto").addModifiers(Modifier.PUBLIC);
+        TypeSpec.classBuilder(types.dtoClass(struct.type())).addModifiers(Modifier.PUBLIC);
     for (Field field : struct.fields()) {
       dto.addField(
           FieldSpec.builder(types.dtoType(field.type()), field.name(), Modifier.PUBLIC).build());

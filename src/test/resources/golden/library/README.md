@@ -81,7 +81,7 @@ class MyService {
 }
 ```
 
-- 引数・戻り値は、構造体ならDTO（`com.generated.dto.XxxDto`）、文字列は `String` です。
+- 引数・戻り値は、構造体・enumならDTO（`com.generated.dto.XxxDto`）、文字列は `String` です。
 - out/inout引数がある操作は、戻り値とout/inout引数をまとめたrecord（`XxxClient.操作名Result`）を返します。
 - サービスへの接続は、最初の呼び出しのときに行います。CORBAサーバーが止まっていてもアプリは起動できます。
 
@@ -97,9 +97,12 @@ class MyService {
 `any` 型は `com.generated.dto.AnyValue`（型名と値の組）で受け渡します。
 
 ```java
-AnyValue v = AnyValue.of(tagDto);                  // 構造体・enumのDTOから作る（型名は自動で決まる）
-AnyValue n = new AnyValue("long", 42);              // 基本型は型名を指定する
-Optional<TagDto> tag = v.as(TagDto.class);          // 型を指定して取り出す
+// 構造体・enumのDTOから作る（型名は自動で決まる）
+AnyValue v = AnyValue.of(tag);
+// 基本型は型名を指定する
+AnyValue n = new AnyValue("long", 42);
+// 型を指定して取り出す
+Optional<TagDto> t = v.as(TagDto.class);
 ```
 
 sequence・union などはAnyに入れて送れません（受け取りはできます）。

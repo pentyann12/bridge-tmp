@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.toru_otsuki.bridge_generator.gen.Naming;
 import com.toru_otsuki.bridge_generator.gen.Target;
 import java.nio.file.Path;
 import java.util.List;
@@ -26,6 +27,7 @@ class CliOptionsTest {
     assertEquals("SJIS", o.stringCharset());
     assertFalse(o.singleProject());
     assertEquals("CombinedApi", o.projectName());
+    assertEquals(Naming.DEFAULT, o.naming());
     assertFalse(o.help());
   }
 
@@ -42,6 +44,10 @@ class CliOptionsTest {
             "--string-charset=Windows-31J",
             "--single-project",
             "--project-name=Bridge",
+            "--dto-prefix=Cx",
+            "--dto-suffix=",
+            "--result-prefix=R",
+            "--result-suffix=Out",
             "a.idl",
             "b.idl");
     assertEquals(List.of(Path.of("a.idl"), Path.of("b.idl")), o.idlFiles());
@@ -53,6 +59,7 @@ class CliOptionsTest {
     assertEquals("Windows-31J", o.stringCharset());
     assertTrue(o.singleProject());
     assertEquals("Bridge", o.projectName());
+    assertEquals(new Naming("Cx", "", "R", "Out"), o.naming());
   }
 
   /// `--return-mode`が空のときはDTOに変換することを確かめる
@@ -89,7 +96,8 @@ class CliOptionsTest {
     assertEquals("none", CliOptions.parse("--string-charset=none", "a.idl").stringCharset());
   }
 
-  /// 不明なオプション・不正な`--return-mode`・`--string-charset`・`--target`・IDLファイル未指定を拒否することを確かめる
+  ///
+  /// 不明なオプション・不正な`--return-mode`・`--string-charset`・`--target`・クラス名に使えないプレフィックスとサフィックス・IDLファイル未指定を拒否することを確かめる
   @Test
   void rejectsInvalidInput() {
     assertThrows(IllegalArgumentException.class, () -> CliOptions.parse("--unknown", "a.idl"));
@@ -101,6 +109,17 @@ class CliOptionsTest {
     assertThrows(
         IllegalArgumentException.class, () -> CliOptions.parse("--string-charset=a b", "a.idl"));
     assertThrows(IllegalArgumentException.class, () -> CliOptions.parse("--single-project"));
+    assertThrows(
+        IllegalArgumentException.class, () -> CliOptions.parse("--dto-suffix=-x", "a.idl"));
+    assertThrows(IllegalArgumentException.class, () -> CliOptions.parse("--dto-prefix=1", "a.idl"));
+    assertThrows(
+        IllegalArgumentException.class, () -> CliOptions.parse("--result-suffix=a.b", "a.idl"));
+  }
+
+  /// サフィックスは数字で始めてもよいことを確かめる
+  @Test
+  void suffixMayStartWithDigit() {
+    assertEquals("2", CliOptions.parse("--dto-suffix=2", "a.idl").naming().dtoSuffix());
   }
 
   /// 使い方の説明文に全オプションが載っていることを確かめる
@@ -118,6 +137,10 @@ class CliOptionsTest {
             "--string-charset",
             "--single-project",
             "--project-name",
+            "--dto-prefix",
+            "--dto-suffix",
+            "--result-prefix",
+            "--result-suffix",
             "--help")) {
       assertTrue(usage.contains(option), option);
     }

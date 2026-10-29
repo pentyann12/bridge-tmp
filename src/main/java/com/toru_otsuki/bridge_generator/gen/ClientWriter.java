@@ -101,7 +101,7 @@ final class ClientWriter {
             .collect(Collectors.joining(", "));
     String returnType =
         op.hasOutParams()
-            ? resultRecordName(op)
+            ? resultRecordName(op, ctx)
             : op.returnType().map(t -> types.dtoType(t).toString()).orElse("void");
 
     // 呼び出しの準備。省略できないinout引数の確認と、out/inout引数のHolderの用意
@@ -141,7 +141,7 @@ final class ClientWriter {
                   .map(t -> "      %s __ret = %s;\n".formatted(types.corbaType(t), call))
                   .orElse("      %s;\n".formatted(call))
               + "      return new %s(%s);\n"
-                  .formatted(resultRecordName(op), String.join(", ", components));
+                  .formatted(resultRecordName(op, ctx), String.join(", ", components));
     } else if (op.returnType().isPresent()) {
       CorbaType t = op.returnType().get();
       invoke =
@@ -193,11 +193,11 @@ final class ClientWriter {
           /** %s の結果（戻り値とout/inout引数）。 */
           public record %s(%s) {}
         """
-        .formatted(op.name(), resultRecordName(op), String.join(", ", components));
+        .formatted(op.name(), resultRecordName(op, ctx), String.join(", ", components));
   }
 
-  private static String resultRecordName(Operation op) {
-    return op.capitalizedName() + "Result";
+  private static String resultRecordName(Operation op, GenContext ctx) {
+    return ctx.settings().naming().resultName(op);
   }
 
   private static String toDto(CorbaType type, String expr, TypeMapping types) {

@@ -2,6 +2,7 @@ package com.toru_otsuki.bridge_generator;
 
 import com.toru_otsuki.bridge_generator.gen.GenSettings;
 import com.toru_otsuki.bridge_generator.gen.LibraryProjectGenerator;
+import com.toru_otsuki.bridge_generator.gen.NameConflicts;
 import com.toru_otsuki.bridge_generator.gen.SpringBootProjectGenerator;
 import com.toru_otsuki.bridge_generator.gen.Target;
 import com.toru_otsuki.bridge_generator.idl.IdljCompiler;
@@ -50,7 +51,12 @@ record BridgeGenerator(CliOptions options) {
             options.stringCharset(),
             stubRoot,
             model.structs(),
-            model.enums());
+            model.enums(),
+            options.naming());
+    List<String> conflicts = NameConflicts.find(model.services(), settings, options.target());
+    if (!conflicts.isEmpty()) {
+      throw new GenerationException(String.join("\n", conflicts));
+    }
     List<Path> generated = new ArrayList<>();
     if (options.target() == Target.LIBRARY) {
       Path output = options.outputRoot().resolve(options.projectName());

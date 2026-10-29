@@ -21,7 +21,8 @@ import com.toru_otsuki.bridge_generator.model.CorbaType;
 /// 生成する式中のクラスは[ClassName]で埋め込むので、JavaPoetの`JavaFile`内ではimportされた単純名に、`CodeBlock#toString()`では完全修飾名になる。
 ///
 /// @param basePackage 生成プロジェクトのベースパッケージ
-record TypeMapping(String basePackage) {
+/// @param naming DTOの名前の付け方
+record TypeMapping(String basePackage, Naming naming) {
   /// `java.lang.`を付けずに書くためのString型（JavaPoetの`JavaFile`内でも単純名で出力される）
   static final ClassName STRING = ClassName.get("", "String");
 
@@ -33,6 +34,14 @@ record TypeMapping(String basePackage) {
 
   String mapperPackage() {
     return basePackage + ".mapper";
+  }
+
+  /// 構造体・enumのDTOのクラスを返す
+  ///
+  /// @param type 構造体かenumの型
+  /// @return DTOのクラス
+  ClassName dtoClass(CorbaType.Named type) {
+    return dtoClass(naming.dtoName(type.simpleName()));
   }
 
   ClassName dtoClass(String simpleName) {
@@ -52,7 +61,7 @@ record TypeMapping(String basePackage) {
       case CorbaType.Primitive p -> primitive(p.name());
       case CorbaType.Str s -> STRING;
       case CorbaType.AnyType a -> dtoClass("AnyValue");
-      case CorbaType.Named n -> dtoClass(n.simpleName() + "Dto");
+      case CorbaType.Named n -> dtoClass(n);
       case CorbaType.ArrayOf a -> ArrayTypeName.of(dtoType(a.element()));
     };
   }

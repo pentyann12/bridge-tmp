@@ -1,5 +1,6 @@
 package com.toru_otsuki.bridge_generator;
 
+import com.toru_otsuki.bridge_generator.gen.Naming;
 import com.toru_otsuki.bridge_generator.gen.Target;
 import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
@@ -19,6 +20,7 @@ import java.util.List;
 /// @param stringCharset CORBAサーバーが文字列に使う文字コード。`none`なら読み替えない（生成アプリの設定の既定値になる）
 /// @param singleProject 全サービスを単一プロジェクトにまとめるかどうか
 /// @param projectName 単一プロジェクト時・ライブラリのプロジェクト名
+/// @param naming 利用者が使うクラスの名前の付け方
 /// @param help ヘルプ表示が要求されたかどうか
 record CliOptions(
     Target target,
@@ -31,6 +33,7 @@ record CliOptions(
     String stringCharset,
     boolean singleProject,
     String projectName,
+    Naming naming,
     boolean help) {
   /// `--string-charset`で文字コードを読み替えないことを表す値
   static final String NO_CONVERSION = "none";
@@ -57,6 +60,10 @@ record CliOptions(
     boolean singleProject = false;
     String projectName = null;
     String targetName = "rest";
+    String dtoPrefix = Naming.DEFAULT.dtoPrefix();
+    String dtoSuffix = Naming.DEFAULT.dtoSuffix();
+    String resultPrefix = Naming.DEFAULT.resultPrefix();
+    String resultSuffix = Naming.DEFAULT.resultSuffix();
 
     for (String arg : args) {
       if (arg.startsWith("--target=")) {
@@ -77,6 +84,14 @@ record CliOptions(
         singleProject = true;
       } else if (arg.startsWith("--project-name=")) {
         projectName = valueOf(arg);
+      } else if (arg.startsWith("--dto-prefix=")) {
+        dtoPrefix = affixOf(arg, true);
+      } else if (arg.startsWith("--dto-suffix=")) {
+        dtoSuffix = affixOf(arg, false);
+      } else if (arg.startsWith("--result-prefix=")) {
+        resultPrefix = affixOf(arg, true);
+      } else if (arg.startsWith("--result-suffix=")) {
+        resultSuffix = affixOf(arg, false);
       } else if (arg.equals("--help") || arg.equals("-h")) {
         return new CliOptions(
             Target.REST,
@@ -89,6 +104,7 @@ record CliOptions(
             stringCharset,
             false,
             "CombinedApi",
+            Naming.DEFAULT,
             true);
       } else if (arg.startsWith("-")) {
         throw new IllegalArgumentException("不明なオプションです: " + arg);
@@ -135,11 +151,22 @@ record CliOptions(
         stringCharset,
         singleProject,
         projectName,
+        new Naming(dtoPrefix, dtoSuffix, resultPrefix, resultSuffix),
         false);
   }
 
   private static String valueOf(String arg) {
     return arg.substring(arg.indexOf('=') + 1);
+  }
+
+  /// 名前のプレフィックス・サフィックスの値を取り出す。空も認める
+  private static String affixOf(String arg, boolean prefix) {
+    String value = valueOf(arg);
+    if (!Naming.isValidAffix(value, prefix)) {
+      throw new IllegalArgumentException(
+          "%s にはJavaのクラス名に使える文字を指定してください: %s".formatted(arg.substring(0, arg.indexOf('=')), value));
+    }
+    return value;
   }
 
   private static boolean isSupportedCharset(String name) {
@@ -167,6 +194,11 @@ record CliOptions(
           --single-project            全サービスを1つのSpringプロジェクトにまとめる
           --project-name=<name>       --single-project 時・ライブラリのプロジェクト名
                                       (default: rest は CombinedApi、library は corba-client)
+          --dto-prefix=<s>            構造体・enumのDTOのクラス名の前に付ける文字列(default: なし)
+          --dto-suffix=<s>            構造体・enumのDTOのクラス名の後ろに付ける文字列。空にもできる(default: Dto)
+          --result-prefix=<s>         ライブラリの、out/inout引数がある操作の結果のrecord名の前に付ける文字列
+                                      (default: なし)
+          --result-suffix=<s>         同じく後ろに付ける文字列。空にもできる(default: Result)
           --help, -h                  このヘルプを表示
 
         """;

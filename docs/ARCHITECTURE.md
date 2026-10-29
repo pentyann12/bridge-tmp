@@ -96,8 +96,10 @@ module と interface の中を宣言順にたどり、次を集めます。Java 
 | `Primitive` | `int`, `long` | 同じ | そのまま | そのまま |
 | `Str` | `String` | `String` | `StringMapper.encode` | `StringMapper.decode` |
 | `AnyType` | `org.omg.CORBA.Any` | `AnyValue` | `AnyMapper.toAnyValue` | `AnyMapper.toAny` |
-| `Named` | `Coverage.Tag`, `Coverage.Status` | `TagDto`, `StatusDto` | `TagMapper.toDto` | `TagMapper.fromDto` |
+| `Named` | `Coverage.Tag`, `Coverage.Status` | `TagDto`, `StatusDto`（※） | `TagMapper.toDto` | `TagMapper.fromDto` |
 | `ArrayOf` | `Tag[]`, `String[][]` | 要素の DTO 型の配列 | 要素ごとに変換（`Arrays.stream`、入れ子はラムダ） | 同左 |
+
+※ DTO の名前は `--dto-prefix` / `--dto-suffix` で変えられます（`Naming`）。空にすると idlj のクラスと同じ単純名になりますが、生成コードは完全修飾名か JavaPoet の import で区別するので問題ありません。ただし生成コードは `String` などを単純名で書き、REST ブリッジは操作ごとのクラス（`XxxRpcRequest` など）を同じ dto パッケージに置くため、それらと重なる名前は生成前に `NameConflicts` がエラーにします。
 
 String は、CORBA サーバーが ISO-8859-1 として送ってくる自分の文字コード（既定は SJIS）のバイト列を読み替えるため、`--return-mode` によらず常に `StringMapper` を通します。文字コードは生成アプリの `corba.string-charset` で決まり、`--string-charset` はその既定値です（application.yml に書かれ、`@Value` の既定値にもなります）。`none` なら読み替えません。Mapper は静的メソッドから呼ぶため、`StringMapper` 自身を Bean にして、起動時に設定値を静的フィールドへ移します。`--return-mode=raw` のときは、戻り値と out 引数の Any と名前付きの型を変換せず CORBA 型のまま返します（リクエスト側は常に DTO です）。
 
@@ -188,7 +190,7 @@ REST ブリッジは、インターフェースで宣言した操作だけを公
  └─ src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
 ```
 
-- **クライアント（`XxxClient`）**: in / inout 引数をメソッドの引数に、戻り値を戻り値にします。out / inout 引数がある操作は、戻り値と out / inout 引数をまとめた record（`XxxClient.操作名Result`）を返します。inout の string・struct・enum・配列が null なら `NullPointerException` にします。サービスのオブジェクト参照は最初の呼び出しで解決するので、CORBA サーバーが止まっていても利用側は起動できます。親のインターフェースから継承した操作（祖先の分も含む。ひし形の継承でも 1 回ずつ）もメソッドにします。
+- **クライアント（`XxxClient`）**: in / inout 引数をメソッドの引数に、戻り値を戻り値にします。out / inout 引数がある操作は、戻り値と out / inout 引数をまとめた record（`XxxClient.操作名Result`。名前は `--result-prefix` / `--result-suffix` で変えられる）を返します。inout の string・struct・enum・配列が null なら `NullPointerException` にします。サービスのオブジェクト参照は最初の呼び出しで解決するので、CORBA サーバーが止まっていても利用側は起動できます。親のインターフェースから継承した操作（祖先の分も含む。ひし形の継承でも 1 回ずつ）もメソッドにします。
 - **例外**: `raises` のユーザー例外は、DTO を `detail()` で持つ `XxxException`（名前が Exception で終わる exception はそのままの名前）に、CORBA のシステム例外は `CorbaCallException` に包み直します。どちらも `RuntimeException` です。
 - **ORB**: `CorbaConnection` が 1 つ持ち、閉じるときに破棄します。REST ブリッジの `CorbaOrb` と同じく、MBean を登録しない設定と、gmbal のシステムプロパティの設定をします。`corba.orb.*` は ORB にそのまま渡します。同じ Tomcat に利用アプリを複数置けますが、jar は Tomcat の共有 lib ではなく各アプリの `WEB-INF/lib` に置きます（`StringMapper` の文字コード設定が static のため）。
 - **Spring Boot**: 利用側が Spring Boot なら、jar を依存に入れるだけで自動設定が働きます。`CorbaConnection` を Bean にし（終了時に close）、`corba.<サービス名>.ior` が設定されたサービスだけクライアントを Bean にします。`corba.string-charset` は起動時に `StringMapper.configure` へ渡します。Spring Boot はコンパイル時だけの依存で、Spring を使わない利用者は `CorbaConnection` と `XxxClient` を自分で作ります。

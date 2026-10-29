@@ -23,7 +23,7 @@ final class MapperGenerator {
   /// @throws IOException ファイルの書き込みに失敗した場合
   static void generate(Struct struct, GenContext ctx) throws IOException {
     TypeMapping types = ctx.types();
-    ClassName dtoClass = types.dtoClass(struct.name() + "Dto");
+    ClassName dtoClass = types.dtoClass(struct.type());
     ClassName corbaClass = ClassName.get(struct.pkg(), struct.name());
 
     MethodSpec.Builder toDto =
