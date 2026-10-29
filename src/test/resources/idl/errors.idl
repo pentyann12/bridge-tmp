@@ -1,4 +1,4 @@
-// 共有ライブラリの回帰テスト用IDL。ユーザー例外（raises）を使う操作を並べている。
+// 共有ライブラリの回帰テスト用IDL。ユーザー例外（raises）を使う操作と、インターフェースの継承を並べている。
 // RESTブリッジは今のところraisesに対応していない（生成したCorbaClientがコンパイルできない）ので、ライブラリのテストだけで使う。
 #pragma prefix "toru-otsuki.example"
 
@@ -17,4 +17,16 @@ module Errors {
     string fetch(in long id) raises (NotFound, AccessDeniedException);
     void check(inout string token) raises (AccessDeniedException);
   };
+
+  // 継承した操作は子のクライアントにも入る
+  interface Audited : Guarded {
+    void audit(in string note);
+  };
+
+  interface Reviewed : Guarded {
+    boolean approve(in long id);
+  };
+
+  // ひし形の継承（Guardedの操作は1回だけ入る）。自分で宣言した操作がなくてもクライアントを作る
+  interface Supervised : Audited, Reviewed {};
 };

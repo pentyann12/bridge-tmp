@@ -32,7 +32,13 @@ corba:
   string-charset: SJIS
   ItemService:
     ior: IOR:...
+  Audited:
+    ior: IOR:...
   Guarded:
+    ior: IOR:...
+  Reviewed:
+    ior: IOR:...
+  Supervised:
     ior: IOR:...
   ClockService:
     ior: IOR:...
@@ -41,7 +47,10 @@ corba:
 | サービス | クライアント | IORの設定 |
 |---|---|---|
 | `ItemService` | `com.generated.client.ItemServiceClient` | `corba.ItemService.ior` |
+| `Audited` | `com.generated.client.AuditedClient` | `corba.Audited.ior` |
 | `Guarded` | `com.generated.client.GuardedClient` | `corba.Guarded.ior` |
+| `Reviewed` | `com.generated.client.ReviewedClient` | `corba.Reviewed.ior` |
+| `Supervised` | `com.generated.client.SupervisedClient` | `corba.Supervised.ior` |
 | `ClockService` | `com.generated.client.ClockServiceClient` | `corba.ClockService.ior` |
 
 ORBの設定を変えるときは `corba.orb` の下に書きます。キーにドットを含むので `[ ]` で囲みます。

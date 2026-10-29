@@ -22,6 +22,7 @@ import com.toru_otsuki.bridge_generator.model.Service;
 import com.toru_otsuki.bridge_generator.model.Struct;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -93,11 +94,28 @@ final class ModelBuilder {
     return all;
   }
 
-  /// インターフェースで宣言した操作からサービスを作る。継承した操作と`attribute`は含めない
+  /// インターフェースの操作からサービスを作る。`attribute`は含めない
+  ///
+  /// 継承した操作は`allMethods()`（親から順に、宣言した操作も含む）から宣言した操作を除いて求める。
+  /// ひし形の継承では同じ親の操作が2回入るので、同じ定義は1つにまとめる。
   private static Service service(InterfaceEntry iface) {
     String javaName = Util.javaQualifiedName(iface);
+    Set<MethodEntry> declared = Collections.newSetFromMap(new IdentityHashMap<>());
+    declared.addAll(iface.methods());
+    Set<MethodEntry> inherited = Collections.newSetFromMap(new IdentityHashMap<>());
+    for (MethodEntry method : iface.allMethods()) {
+      if (!declared.contains(method)) inherited.add(method);
+    }
+    return new Service(
+        simpleName(javaName),
+        packageName(javaName),
+        operations(iface.methods()),
+        operations(iface.allMethods().stream().filter(inherited::remove).toList()));
+  }
+
+  private static List<Operation> operations(List<MethodEntry> methods) {
     List<Operation> operations = new ArrayList<>();
-    for (MethodEntry method : iface.methods()) {
+    for (MethodEntry method : methods) {
       if (method instanceof AttributeEntry) continue;
       Optional<CorbaType> returnType =
           method.type() == null ? Optional.empty() : Optional.of(resolve(method.type()));
@@ -105,7 +123,7 @@ final class ModelBuilder {
           method.exceptions().stream().map(e -> (CorbaType.Named) resolve(e)).toList();
       operations.add(new Operation(method.name(), returnType, params(method), raises));
     }
-    return new Service(simpleName(javaName), packageName(javaName), operations);
+    return operations;
   }
 
   /// 引数の向きはIDLの宣言から決まる。out/inoutはHolder型で渡すので、その名前もidljの規則で求める

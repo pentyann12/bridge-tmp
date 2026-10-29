@@ -51,7 +51,7 @@ public final class LibraryProjectGenerator {
 
     // サービスごとのクライアントと、それをBeanにするSpring Bootの自動設定
     List<Service> withOperations =
-        services.stream().filter(s -> !s.operations().isEmpty()).toList();
+        services.stream().filter(s -> !s.allOperations().isEmpty()).toList();
     for (Service service : withOperations) {
       ClientWriter.write(service, ctx);
     }

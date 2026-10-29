@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 /// - DTOとCORBAの型の変換、文字コードの読み替えは[TypeMapping]の規則で行う
 /// - ユーザー例外はライブラリの例外クラスに、システム例外は`CorbaCallException`に包み直す
 /// - サービスのオブジェクト参照は最初の呼び出しで解決する。CORBAサーバーが止まっていても、利用側のアプリは起動できる
+/// - 親のインターフェースから継承した操作も、子のクライアントのメソッドにする（idljのスタブも親のメソッドを継承している）
 final class ClientWriter {
   private ClientWriter() {}
 
@@ -39,11 +40,11 @@ final class ClientWriter {
   static void write(Service service, GenContext ctx) throws IOException {
     String stub = qualified(service.pkg(), service.name());
     String methods =
-        service.operations().stream()
+        service.allOperations().stream()
             .map(op -> method(service, op, ctx))
             .collect(Collectors.joining("\n"));
     String records =
-        service.operations().stream()
+        service.allOperations().stream()
             .filter(Operation::hasOutParams)
             .map(op -> resultRecord(op, ctx))
             .collect(Collectors.joining("\n"));

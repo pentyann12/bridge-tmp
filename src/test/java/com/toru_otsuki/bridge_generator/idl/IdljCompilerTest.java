@@ -133,6 +133,28 @@ class IdljCompilerTest {
     assertEquals("IDL:toru-otsuki.example/Errors/NotFound:1.0", notFound.repoId());
   }
 
+  /// 継承した操作は、宣言した操作と分けて、祖先の分も含めて1回ずつモデルに入ることを確かめる
+  ///
+  /// @param stubs スタブの出力先
+  /// @throws Exception 生成に失敗した場合
+  @Test
+  void inheritedOperationsAreModeled(@TempDir Path stubs) throws Exception {
+    IdlModel model =
+        IdljCompiler.compile(Path.of("src/test/resources/idl/errors.idl"), stubs, "com.corba");
+    Service audited = service(model, "Audited");
+    assertEquals(List.of("audit"), names(audited.operations()));
+    assertEquals(List.of("fetch", "check"), names(audited.inheritedOperations()));
+
+    Service supervised = service(model, "Supervised");
+    assertEquals(List.of(), supervised.operations());
+    assertEquals(
+        List.of("fetch", "check", "audit", "approve"), names(supervised.allOperations()));
+  }
+
+  private static List<String> names(List<Operation> operations) {
+    return operations.stream().map(Operation::name).toList();
+  }
+
   /// 文法の誤りがあるIDLは、生成を止めて利用者向けのエラーにすることを確かめる
   ///
   /// @param dir IDLとスタブを置く作業ディレクトリ

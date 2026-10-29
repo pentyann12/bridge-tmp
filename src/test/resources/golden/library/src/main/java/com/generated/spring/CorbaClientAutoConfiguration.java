@@ -39,9 +39,30 @@ public class CorbaClientAutoConfiguration {
 
   @Bean
   @ConditionalOnMissingBean
+  @ConditionalOnProperty("corba.Audited.ior")
+  public AuditedClient auditedClient(CorbaConnection connection, Environment env) {
+    return new AuditedClient(connection, env.getRequiredProperty("corba.Audited.ior"));
+  }
+
+  @Bean
+  @ConditionalOnMissingBean
   @ConditionalOnProperty("corba.Guarded.ior")
   public GuardedClient guardedClient(CorbaConnection connection, Environment env) {
     return new GuardedClient(connection, env.getRequiredProperty("corba.Guarded.ior"));
+  }
+
+  @Bean
+  @ConditionalOnMissingBean
+  @ConditionalOnProperty("corba.Reviewed.ior")
+  public ReviewedClient reviewedClient(CorbaConnection connection, Environment env) {
+    return new ReviewedClient(connection, env.getRequiredProperty("corba.Reviewed.ior"));
+  }
+
+  @Bean
+  @ConditionalOnMissingBean
+  @ConditionalOnProperty("corba.Supervised.ior")
+  public SupervisedClient supervisedClient(CorbaConnection connection, Environment env) {
+    return new SupervisedClient(connection, env.getRequiredProperty("corba.Supervised.ior"));
   }
 
   @Bean

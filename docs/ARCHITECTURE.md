@@ -160,6 +160,12 @@ Any は JSON では `{"type": 型名, "value": 値}`（`AnyValue`）で表し、
 
 REST ブリッジは `raises` に対応していません。スタブのメソッドがチェック例外を投げるのに、生成する `CorbaClient` が宣言していないため、`raises` のある IDL では生成したプロジェクトがコンパイルできません。共有ライブラリは対応しています。
 
+TODO: 対応するには、エラー時の JSON の形（例外の型名と中身の載せ方）と HTTP ステータスを決める必要があります（`CorbaClientWriter` に TODO コメントあり）。
+
+### 継承した操作
+
+REST ブリッジは、インターフェースで宣言した操作だけを公開し、親から継承した操作は公開しません。単一プロジェクトでは URL が `/操作名` なので、親と子の両方で公開すると同じ URL ができて起動に失敗するためです。継承した操作は親のサービスの API から呼びます。CORBA サーバーが子のオブジェクトしか公開していなければ、親の `corba.<親>.ior` に子の IOR を設定します（子は親の操作をすべて持つので、そのまま呼べます）。共有ライブラリは継承した操作も子のクライアントに入れます。
+
 ## 4. 共有ライブラリの生成
 
 `--target=library` で、全サービスを 1 つの java-library プロジェクト（`<output-root>/<project-name>`、既定は `corba-client`）にまとめます。利用者には DTO と Java の型だけを見せ、Holder・Any・CORBA の型・文字コード・ORB は隠します。
@@ -178,7 +184,7 @@ REST ブリッジは `raises` に対応していません。スタブのメソ�
  └─ src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
 ```
 
-- **クライアント（`XxxClient`）**: in / inout 引数をメソッドの引数に、戻り値を戻り値にします。out / inout 引数がある操作は、戻り値と out / inout 引数をまとめた record（`XxxClient.操作名Result`）を返します。inout の string・struct・配列が null なら `NullPointerException` にします。サービスのオブジェクト参照は最初の呼び出しで解決するので、CORBA サーバーが止まっていても利用側は起動できます。
+- **クライアント（`XxxClient`）**: in / inout 引数をメソッドの引数に、戻り値を戻り値にします。out / inout 引数がある操作は、戻り値と out / inout 引数をまとめた record（`XxxClient.操作名Result`）を返します。inout の string・struct・配列が null なら `NullPointerException` にします。サービスのオブジェクト参照は最初の呼び出しで解決するので、CORBA サーバーが止まっていても利用側は起動できます。親のインターフェースから継承した操作（祖先の分も含む。ひし形の継承でも 1 回ずつ）もメソッドにします。
 - **例外**: `raises` のユーザー例外は、DTO を `detail()` で持つ `XxxException`（名前が Exception で終わる exception はそのままの名前）に、CORBA のシステム例外は `CorbaCallException` に包み直します。どちらも `RuntimeException` です。
 - **ORB**: `CorbaConnection` が 1 つ持ち、閉じるときに破棄します。REST ブリッジの `CorbaOrb` と同じく、MBean を登録しない設定と、gmbal のシステムプロパティの設定をします。`corba.orb.*` は ORB にそのまま渡します。同じ Tomcat に利用アプリを複数置けますが、jar は Tomcat の共有 lib ではなく各アプリの `WEB-INF/lib` に置きます（`StringMapper` の文字コード設定が static のため）。
 - **Spring Boot**: 利用側が Spring Boot なら、jar を依存に入れるだけで自動設定が働きます。`CorbaConnection` を Bean にし（終了時に close）、`corba.<サービス名>.ior` が設定されたサービスだけクライアントを Bean にします。`corba.string-charset` は起動時に `StringMapper.configure` へ渡します。Spring Boot はコンパイル時だけの依存で、Spring を使わない利用者は `CorbaConnection` と `XxxClient` を自分で作ります。
@@ -187,13 +193,13 @@ REST ブリッジは `raises` に対応していません。スタブのメソ�
 
 ## テスト
 
-`./gradlew test` で次を実行します。網羅用 IDL は `src/test/resources/idl/coverage.idl` です。ユーザー例外を使う `errors.idl` は、REST ブリッジが `raises` に対応していないため共有ライブラリのテストだけで使います。
+`./gradlew test` で次を実行します。網羅用 IDL は `src/test/resources/idl/coverage.idl` です。ユーザー例外と継承を使う `errors.idl` は、REST ブリッジが `raises` に対応していないため共有ライブラリのテストだけで使います。
 
 | テスト | 内容 |
 |---|---|
 | `GoldenTest` | 網羅用 IDL から生成したプロジェクト（idlj スタブのコピーを除く）を `src/test/resources/golden/` と比較。REST の 2 通り（dto / raw）と共有ライブラリ |
 | `GeneratedCodeCompilesTest` | 生成したソースを spring-web・spring-context・Spring Boot の自動設定・Jackson・CORBA API だけをクラスパスにしてコンパイル |
-| `IdljCompilerTest` | グローバル型のパッケージ、引数の向きと Holder、typedef の解決、リポジトリ ID、raises、文法エラー |
+| `IdljCompilerTest` | グローバル型のパッケージ、引数の向きと Holder、typedef の解決、リポジトリ ID、raises、継承した操作、文法エラー |
 | `CliOptionsTest` / `TypeMappingTest` | 各部品の単体テスト |
 
 生成ロジックを意図して変えたときは、`./gradlew test -Dgolden.update=true` で期待値を更新し、差分をレビューしてからコミットします。

@@ -87,6 +87,9 @@ final class CorbaClientWriter {
               """
                 .formatted(service.pkg(), serviceName);
 
+    // TODO raises（ユーザー例外）に対応する。スタブのメソッドはチェック例外を投げるが、ここでは宣言も捕捉もしていないので、
+    //  raisesのあるIDLから生成するとコンパイルできない。対応するには、エラー時のJSONの形（例外の型名と中身の載せ方）と
+    //  HTTPステータスを決めて、ControllerMethodBuilderで例外をレスポンスに変換する必要がある。
     String methods =
         service.operations().stream()
             .map(
